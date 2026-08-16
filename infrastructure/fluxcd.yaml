@@ -7,7 +7,7 @@ spec:
   interval: 1m
   sourceRef:
     kind: GitRepository
-    name: atlas
+    name: hestia
     namespace: flux-system
   path: ./infrastructure/fluxcd
   prune: true
