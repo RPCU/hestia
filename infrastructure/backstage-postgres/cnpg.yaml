@@ -12,6 +12,14 @@ spec:
       owner: backstage
       secret:
         name: backstage
+  managed:
+    roles:
+      - name: backstage
+        ensure: present
+        login: true
+        createdb: true
+        passwordSecret:
+          name: backstage
   storage:
     size: 6Gi
   resources:
