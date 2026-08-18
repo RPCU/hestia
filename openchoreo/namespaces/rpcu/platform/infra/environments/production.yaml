@@ -9,6 +9,6 @@ metadata:
     openchoreo.dev/name: production
 spec:
   dataPlaneRef:
-    kind: ClusterDataPlane
-    name: default
+    kind: DataPlane
+    name: dev
   isProduction: true
