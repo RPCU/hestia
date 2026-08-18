@@ -1,0 +1,19 @@
+apiVersion: openchoreo.dev/v1alpha1
+kind: ClusterAuthzRoleBinding
+metadata:
+  name: backstage-catalog-reader-zitadel-binding
+spec:
+  effect: allow
+  # The Helm-shipped `backstage-catalog-reader-binding` matches the literal
+  # sub `openchoreo-backstage-client` (OpenChoreo's built-in IdP). With Zitadel
+  # the `openchoreo-backstage` service client's token carries a numeric `sub`
+  # instead, so this additive binding grants the catalog-reader role to that
+  # real subject. Without it the OpenChoreo entity provider gets 403 on
+  # GET-by-name and ingests 0 entities (empty Backstage catalog).
+  entitlement:
+    claim: sub
+    value: "386798629668571158"
+  roleMappings:
+    - roleRef:
+        kind: ClusterAuthzRole
+        name: backstage-catalog-reader
