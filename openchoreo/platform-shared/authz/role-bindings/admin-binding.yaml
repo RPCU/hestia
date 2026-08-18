@@ -1,0 +1,13 @@
+apiVersion: openchoreo.dev/v1alpha1
+kind: ClusterAuthzRoleBinding
+metadata:
+  name: rpcu-admin-binding
+spec:
+  effect: allow
+  entitlement:
+    claim: groups
+    value: rpcu-admin
+  roleMappings:
+  - roleRef:
+      kind: ClusterAuthzRole
+      name: admin

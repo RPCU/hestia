@@ -1,0 +1,15 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: openchoreo-namespaces
+  namespace: flux-system
+spec:
+  interval: 5m
+  # Creates the OpenChoreo namespaces (namespaces/<ns>/namespace.yaml). Synced
+  # before platform/projects so the target namespaces exist first.
+  path: ./openchoreo/namespaces
+  prune: false
+  sourceRef:
+    kind: GitRepository
+    name: hestia
+    namespace: flux-system
