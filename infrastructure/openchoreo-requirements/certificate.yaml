@@ -1,0 +1,13 @@
+# Wildcard certificate for Openchoreo Gateway API
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-tls
+  namespace: openchoreo-control-plane
+spec:
+  secretName: wildcard-tls
+  dnsNames:
+    - "*.platform.rpcu.lan"
+  issuerRef:
+    kind: ClusterIssuer
+    name: vault-issuer
