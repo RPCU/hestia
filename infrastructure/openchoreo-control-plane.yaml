@@ -1,0 +1,96 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: openchoreo
+  namespace: flux-system
+spec:
+  type: oci
+  interval: 5m
+  url: oci://ghcr.io/openchoreo/helm-charts
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: openchoreo-control-plane
+  namespace: flux-system
+spec:
+  interval: 5m
+  targetNamespace: openchoreo-control-plane
+  chart:
+    spec:
+      chart: openchoreo-control-plane
+      version: "1.2.2"
+      sourceRef:
+        kind: HelmRepository
+        name: openchoreo
+        namespace: flux-system
+  install:
+    createNamespace: true
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    kubernetesClusterDomain: platform.local
+    openchoreoApi:
+      config:
+        server:
+          publicUrl: "https://api.platform.rpcu.lan"
+        security:
+          authentication:
+            jwt:
+              jwks:
+                skip_tls_verify: true
+      http:
+        hostnames:
+          - "api.platform.rpcu.lan"
+    clusterGateway:
+      url: "https://cluster-gateway.openchoreo-control-plane.svc:8444"
+      tls:
+        issuerRef:
+          kind: ClusterIssuer
+          name: vault-issuer
+        dnsNames:
+          - "cluster-gateway.platform.rpcu.lan"
+      tlsRoute:
+        enabled: true
+        hosts:
+          - host: cluster-gateway.platform.rpcu.lan
+    controllerManager:
+      clusterGateway:
+        url: "https://cluster-gateway.openchoreo-control-plane.svc:8444"
+    backstage:
+      secretName: backstage
+      database:
+        type: postgresql
+      baseUrl: "https://console.platform.rpcu.lan"
+      http:
+        hostnames:
+          - "console.platform.rpcu.lan"
+      tls:
+        enabled: true
+      auth:
+        redirectUrls:
+          - "https://console.platform.rpcu.lan/api/auth/openchoreo-auth/handler/frame"
+        clientId: "386690213738473333"
+        serviceClientId: "openchoreo-backstage"
+        serviceClientSecretKey: "service-client-secret"
+        oidcScope: "openid profile email offline_access groups"
+        scope: "openid"
+      openchoreoApi:
+        url: "http://openchoreo-api:8080"
+      features:
+        auth:
+          redirectFlow:
+            enabled: false
+    security:
+      oidc:
+        issuer: "https://rpcu-gabeck.eu1.zitadel.cloud"
+        jwksUrl: "https://rpcu-gabeck.eu1.zitadel.cloud/oauth/v2/keys"
+        authorizationUrl: "https://rpcu-gabeck.eu1.zitadel.cloud/oauth/v2/authorize"
+        tokenUrl: "https://rpcu-gabeck.eu1.zitadel.cloud/oauth/v2/token"
+    gateway:
+      tls:
+        enabled: true
+        hostname: "*.platform.rpcu.lan"
+        certificateRefs:
+          - name: wildcard-tls
