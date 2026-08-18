@@ -1,0 +1,12 @@
+apiVersion: openchoreo.dev/v1alpha1
+kind: Project
+metadata:
+  annotations:
+    openchoreo.dev/description: Testing - Project for Golang apps
+    openchoreo.dev/display-name: Testing
+  labels:
+    openchoreo.dev/name: testing
+  name: testing
+spec:
+  deploymentPipelineRef:
+    name: standard
