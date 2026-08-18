@@ -1,6 +1,6 @@
 resources:
   - fluxcd.yaml
   - cnpg.yaml
-  - backstage-postgres.yaml
+  - openchoreo-requirements.yaml
   - openchoreo-control-plane.yaml
   - openchoreo-resources.yaml
