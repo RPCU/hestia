@@ -1,0 +1,39 @@
+apiVersion: openchoreo.dev/v1alpha1
+kind: ClusterProjectType
+metadata:
+  name: standard
+  annotations:
+    openchoreo.dev/display-name: Standard Project Type
+    openchoreo.dev/description: >-
+      Minimal project type that provisions only the cell namespace per
+      environment. Per-environment labels and annotations can be added
+      to the namespace via ProjectReleaseBinding.spec.environmentConfigs
+      (namespaceLabels, namespaceAnnotations). Use as the starting
+      template when no additional shared infrastructure (NetworkPolicies,
+      ResourceQuotas, baseline RBAC) is needed.
+  labels:
+    openchoreo.dev/name: standard
+spec:
+  environmentConfigs:
+    openAPIV3Schema:
+      type: object
+      properties:
+        namespaceLabels:
+          type: object
+          additionalProperties:
+            type: string
+          standard: {}
+        namespaceAnnotations:
+          type: object
+          additionalProperties:
+            type: string
+          standard: {}
+  resources:
+    - id: cell-namespace
+      template:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: ${metadata.namespace}
+          labels: ${oc_merge(metadata.labels, environmentConfigs.namespaceLabels)}
+          annotations: ${environmentConfigs.namespaceAnnotations}
