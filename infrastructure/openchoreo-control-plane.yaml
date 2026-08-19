@@ -83,8 +83,8 @@ spec:
         # against the external issuer over HTTPS.
         issuer: "https://thunderid.platform.rpcu.lan"
         authorizationUrl: "https://thunderid.platform.rpcu.lan/oauth2/authorize"
-        jwksUrl: "http://thunderid-service.thunderid.svc.cluster.local:8090/oauth2/jwks"
-        tokenUrl: "http://thunderid-service.thunderid.svc.cluster.local:8090/oauth2/token"
+        jwksUrl: "http://thunderid-service.thunderid.svc.platform.local:8090/oauth2/jwks"
+        tokenUrl: "http://thunderid-service.thunderid.svc.platform.local:8090/oauth2/token"
     gateway:
       tls:
         enabled: true
