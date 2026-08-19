@@ -163,7 +163,7 @@ bootstrap:
             --header 'Content-Type: application/json' \
             --data "{
               \"type\": \"openchoreo-user\",
-              \"organizationUnit\": \"$ORG_UNIT_ID\",
+              \"ouId\": \"$ORG_UNIT_ID\",
               \"attributes\": {
                 \"username\": \"${username}\",
                 \"email\": \"${username}\",
@@ -205,7 +205,7 @@ bootstrap:
           --header 'Content-Type: application/json' \
           --data "{
             \"name\": \"${group_name}\",
-            \"organizationUnitId\": \"$ORG_UNIT_ID\",
+            \"ouId\": \"$ORG_UNIT_ID\",
             \"description\": \"${description}\",
             \"members\": [${group_members}]
           }" \
