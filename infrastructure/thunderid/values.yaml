@@ -242,7 +242,7 @@ bootstrap:
               - "refresh_token"
             responseTypes:
               - "code"
-            tokenEndpointAuthMethod: "client_secret_post"
+            tokenEndpointAuthMethod: "client_secret_basic"
             pkceRequired: false
             publicClient: false
             token:
@@ -285,7 +285,7 @@ bootstrap:
             clientSecret: "supersecret"
             grantTypes:
               - "client_credentials"
-            tokenEndpointAuthMethod: "client_secret_post"
+            tokenEndpointAuthMethod: "client_secret_basic"
             pkceRequired: false
             publicClient: false
             token:
@@ -306,7 +306,7 @@ bootstrap:
             clientSecret: "openchoreo-rca-agent-secret"
             grantTypes:
               - "client_credentials"
-            tokenEndpointAuthMethod: "client_secret_post"
+            tokenEndpointAuthMethod: "client_secret_basic"
             pkceRequired: false
             publicClient: false
             token:
@@ -379,7 +379,7 @@ bootstrap:
             clientSecret: "openchoreo-system-app-secret"
             grantTypes:
               - "client_credentials"
-            tokenEndpointAuthMethod: "client_secret_post"
+            tokenEndpointAuthMethod: "client_secret_basic"
             pkceRequired: false
             publicClient: false
             token:
@@ -461,7 +461,7 @@ bootstrap:
             clientSecret: "openchoreo-workload-publisher-secret"
             grantTypes:
               - "client_credentials"
-            tokenEndpointAuthMethod: "client_secret_post"
+            tokenEndpointAuthMethod: "client_secret_basic"
             pkceRequired: false
             publicClient: false
             token:
@@ -482,7 +482,7 @@ bootstrap:
             clientSecret: "openchoreo-observer-resource-reader-client-secret"
             grantTypes:
               - "client_credentials"
-            tokenEndpointAuthMethod: "client_secret_post"
+            tokenEndpointAuthMethod: "client_secret_basic"
             pkceRequired: false
             publicClient: false
             token:
@@ -503,7 +503,7 @@ bootstrap:
             clientSecret: "openchoreo-finops-agent-secret"
             grantTypes:
               - "client_credentials"
-            tokenEndpointAuthMethod: "client_secret_post"
+            tokenEndpointAuthMethod: "client_secret_basic"
             pkceRequired: false
             publicClient: false
             token:
@@ -524,7 +524,7 @@ bootstrap:
             clientSecret: "mcp-e2e-subject-secret"
             grantTypes:
               - "client_credentials"
-            tokenEndpointAuthMethod: "client_secret_post"
+            tokenEndpointAuthMethod: "client_secret_basic"
             pkceRequired: false
             publicClient: false
             token:
