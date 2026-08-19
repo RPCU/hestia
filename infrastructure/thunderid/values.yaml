@@ -242,6 +242,8 @@ bootstrap:
       log_info "Checking if application 'Backstage' already exists..."
       existing_apps=$(curl -s --max-time 10 "${THUNDER_URL}/applications")
 
+      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
       app_id=$(echo "$existing_apps" | tr '\n' ' ' | sed 's/" *: *"/":"/g' | grep -o '"name":"Backstage"[^}]*"id":"[^"]*"\|"id":"[^"]*"[^}]*"name":"Backstage"' | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
 
       APP_PAYLOAD='{
@@ -354,11 +356,15 @@ bootstrap:
       log_info "Checking if application 'Customer Portal' already exists..."
       existing_apps=$(curl -s --max-time 10 "${THUNDER_URL}/applications")
 
+      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
       app_id=$(echo "$existing_apps" | tr '\n' ' ' | sed 's/" *: *"/":"/g' | grep -o '"clientId":"customer-portal-client"[^}]*"id":"[^"]*"\|"id":"[^"]*"[^}]*"clientId":"customer-portal-client"' | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
 
       APP_PAYLOAD='{
         "name": "Customer Portal",
         "description": "Customer Portal Application",
+        "ouId": "__ORG_UNIT_ID__",
+        "type": "m2m",
         "inboundAuthConfig": [
           {
             "type": "oauth2",
@@ -372,14 +378,18 @@ bootstrap:
               "pkceRequired": false,
               "publicClient": false,
               "token": {
-                "access_token": {
-                  "validityPeriod": 3600
+                "accessToken": {
+                  "clientConfig": {
+                    "validityPeriod": 3600
+                  }
                 }
               }
             }
           }
         ]
       }'
+
+      APP_PAYLOAD="${APP_PAYLOAD//__ORG_UNIT_ID__/${ORG_UNIT_ID}}"
 
       if [ -n "$app_id" ]; then
         log_info "Application 'Customer Portal' already exists (id: $app_id), updating..."
@@ -414,11 +424,15 @@ bootstrap:
       log_info "Checking if RCA Agent application already exists..."
       existing_apps=$(curl -s --max-time 10 "${THUNDER_URL}/applications")
 
+      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
       app_id=$(echo "$existing_apps" | tr '\n' ' ' | sed 's/" *: *"/":"/g' | grep -o '"clientId":"openchoreo-rca-agent"[^}]*"id":"[^"]*"\|"id":"[^"]*"[^}]*"clientId":"openchoreo-rca-agent"' | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
 
       APP_PAYLOAD='{
         "name": "RCA Agent",
         "description": "OpenChoreo RCA Agent Client",
+        "ouId": "__ORG_UNIT_ID__",
+        "type": "m2m",
         "inboundAuthConfig": [
           {
             "type": "oauth2",
@@ -432,14 +446,18 @@ bootstrap:
               "pkceRequired": false,
               "publicClient": false,
               "token": {
-                "access_token": {
-                  "validityPeriod": 3600
+                "accessToken": {
+                  "clientConfig": {
+                    "validityPeriod": 3600
+                  }
                 }
               }
             }
           }
         ]
       }'
+
+      APP_PAYLOAD="${APP_PAYLOAD//__ORG_UNIT_ID__/${ORG_UNIT_ID}}"
 
       if [ -n "$app_id" ]; then
         log_info "RCA Agent application already exists (id: $app_id), updating..."
@@ -474,13 +492,19 @@ bootstrap:
       log_info "Checking if application 'OpenChoreo CLI' already exists..."
       existing_apps=$(curl -s --max-time 10 "${THUNDER_URL}/applications")
 
+      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
       app_id=$(echo "$existing_apps" | tr '\n' ' ' | sed 's/" *: *"/":"/g' | grep -o '"name":"OpenChoreo CLI"[^}]*"id":"[^\"]*"\|"id":"[^\"]*"[^}]*"name":"OpenChoreo CLI"' | grep -o '"id":"[^\"]*"' | head -1 | cut -d'"' -f4)
 
       APP_PAYLOAD='{
         "name": "OpenChoreo CLI",
         "description": "OpenChoreo CLI Default Application",
+        "ouId": "__ORG_UNIT_ID__",
+        "type": "custom",
         "logoUrl": "https://cdn.statically.io/gh/openchoreo/openchoreo.github.io@main/static/img/openchoreo-logo.png",
-        "allowedUserTypes": ["openchoreo-user"],
+        "allowedUserTypes": [
+          "openchoreo-user"
+        ],
         "assertion": {
           "validityPeriod": 3600
         },
@@ -493,7 +517,8 @@ bootstrap:
                 "http://127.0.0.1:55152/auth-callback"
               ],
               "grantTypes": [
-                "authorization_code", "refresh_token"
+                "authorization_code",
+                "refresh_token"
               ],
               "responseTypes": [
                 "code"
@@ -502,18 +527,20 @@ bootstrap:
               "pkceRequired": true,
               "publicClient": true,
               "token": {
-                "access_token": {
-                  "validityPeriod": 3600,
-                  "user_attributes": [
-                    "given_name",
-                    "family_name",
-                    "username",
-                    "groups"
-                  ]
+                "accessToken": {
+                  "userConfig": {
+                    "validityPeriod": 3600,
+                    "attributes": [
+                      "given_name",
+                      "family_name",
+                      "username",
+                      "groups"
+                    ]
+                  }
                 },
-                "id_token": {
+                "idToken": {
                   "validityPeriod": 3600,
-                  "user_attributes": [
+                  "userAttributes": [
                     "given_name",
                     "family_name",
                     "username",
@@ -540,6 +567,8 @@ bootstrap:
           }
         ]
       }'
+
+      APP_PAYLOAD="${APP_PAYLOAD//__ORG_UNIT_ID__/${ORG_UNIT_ID}}"
 
       if [ -n "$app_id" ]; then
         log_info "Application 'OpenChoreo CLI' already exists (id: $app_id), updating..."
@@ -574,11 +603,15 @@ bootstrap:
       log_info "Checking if system application already exists..."
       existing_apps=$(curl -s --max-time 10 "${THUNDER_URL}/applications")
 
+      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
       app_id=$(echo "$existing_apps" | tr '\n' ' ' | sed 's/" *: *"/":"/g' | grep -o '"clientId":"openchoreo-system-app"[^}]*"id":"[^"]*"\|"id":"[^"]*"[^}]*"clientId":"openchoreo-system-app"' | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
 
       APP_PAYLOAD='{
         "name": "System Application",
         "description": "Generic system application for automation and integrations",
+        "ouId": "__ORG_UNIT_ID__",
+        "type": "m2m",
         "inboundAuthConfig": [
           {
             "type": "oauth2",
@@ -592,14 +625,18 @@ bootstrap:
               "pkceRequired": false,
               "publicClient": false,
               "token": {
-                "access_token": {
-                  "validityPeriod": 3600
+                "accessToken": {
+                  "clientConfig": {
+                    "validityPeriod": 3600
+                  }
                 }
               }
             }
           }
         ]
       }'
+
+      APP_PAYLOAD="${APP_PAYLOAD//__ORG_UNIT_ID__/${ORG_UNIT_ID}}"
 
       if [ -n "$app_id" ]; then
         log_info "System application already exists (id: $app_id), updating..."
@@ -634,6 +671,8 @@ bootstrap:
       log_info "Checking if application 'User MCP App' already exists..."
       existing_apps=$(curl -s --max-time 10 "${THUNDER_URL}/applications")
 
+      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
       # Extract application ID if it exists
       app_id=$(echo "$existing_apps" | tr '\n' ' ' | sed 's/" *: *"/":"/g' | grep -o '"name":"User MCP App"[^}]*"id":"[^\"]*"\|"id":"[^\"]*"[^}]*"name":"User MCP App"' | grep -o '"id":"[^\"]*"' | head -1 | cut -d'"' -f4)
 
@@ -641,7 +680,11 @@ bootstrap:
       APP_PAYLOAD='{
         "name": "User MCP App",
         "description": "User MCP app to be used by terminals and user facing AI agents",
-        "allowedUserTypes": ["openchoreo-user"],
+        "ouId": "__ORG_UNIT_ID__",
+        "type": "mcp",
+        "allowedUserTypes": [
+          "openchoreo-user"
+        ],
         "assertion": {
           "validityPeriod": 3600
         },
@@ -666,40 +709,33 @@ bootstrap:
               "pkceRequired": true,
               "publicClient": true,
               "token": {
-                "access_token": {
+                "accessToken": {
+                  "userConfig": {
+                    "validityPeriod": 86400,
+                    "attributes": [
+                      "given_name",
+                      "family_name",
+                      "username",
+                      "groups"
+                    ]
+                  }
+                },
+                "idToken": {
                   "validityPeriod": 86400,
-                  "user_attributes": [
+                  "userAttributes": [
                     "given_name",
                     "family_name",
                     "username",
                     "groups"
                   ]
-                },
-                "id_token": {
-                  "validityPeriod": 86400,
-                  "user_attributes": [
-                    "given_name",
-                    "family_name",
-                    "username",
-                    "groups"
-                  ],
-                  "scopeClaims": {
-                    "groups": [
-                      "groups"
-                    ],
-                    "profile": [
-                      "username",
-                      "given_name",
-                      "family_name",
-                      "picture"
-                    ]
-                  }
                 }
               }
             }
           }
         ]
       }'
+
+      APP_PAYLOAD="${APP_PAYLOAD//__ORG_UNIT_ID__/${ORG_UNIT_ID}}"
 
       if [ -n "$app_id" ]; then
         log_info "Application 'User MCP App' already exists (id: $app_id), updating..."
@@ -734,33 +770,40 @@ bootstrap:
       log_info "Checking if application 'Service MCP App' already exists..."
       existing_apps=$(curl -s --max-time 10 "${THUNDER_URL}/applications")
 
+      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
       # Extract application ID if it exists
       app_id=$(echo "$existing_apps" | tr '\n' ' ' | sed 's/" *: *"/":"/g' | grep -o '"name":"Service MCP App"[^}]*"id":"[^\"]*"\|"id":"[^\"]*"[^}]*"name":"Service MCP App"' | grep -o '"id":"[^\"]*"' | head -1 | cut -d'"' -f4)
 
       # Define the application payload
       APP_PAYLOAD='{
-          "name": "Service MCP App",
-          "description": "Service MCP app to be used by backend services which can securely store the secret",
-          "auth_flow_graph_id": "auth_flow_config_basic",
-          "inboundAuthConfig": [
-              {
-                  "type": "oauth2",
-                  "config": {
-                      "clientId": "service_mcp_client",
-                      "clientSecret": "service_mcp_clientSecret",
-                      "grantTypes": [
-                          "client_credentials"
-                      ],
-                      "tokenEndpointAuthMethod": "client_secret_basic",
-                      "token": {
-                          "access_token": {
-                              "validityPeriod": 86400
-                          }
-                      }
+        "name": "Service MCP App",
+        "description": "Service MCP app to be used by backend services which can securely store the secret",
+        "ouId": "__ORG_UNIT_ID__",
+        "type": "m2m",
+        "inboundAuthConfig": [
+          {
+            "type": "oauth2",
+            "config": {
+              "clientId": "service_mcp_client",
+              "clientSecret": "service_mcp_client_secret",
+              "grantTypes": [
+                "client_credentials"
+              ],
+              "tokenEndpointAuthMethod": "client_secret_basic",
+              "token": {
+                "accessToken": {
+                  "clientConfig": {
+                    "validityPeriod": 86400
                   }
+                }
               }
-          ]
+            }
+          }
+        ]
       }'
+
+      APP_PAYLOAD="${APP_PAYLOAD//__ORG_UNIT_ID__/${ORG_UNIT_ID}}"
 
       if [ -n "$app_id" ]; then
         log_info "Application 'Service MCP App' already exists (id: $app_id), updating..."
@@ -795,11 +838,15 @@ bootstrap:
       log_info "Checking if Workload Publisher application already exists..."
       existing_apps=$(curl -s --max-time 10 "${THUNDER_URL}/applications")
 
+      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
       app_id=$(echo "$existing_apps" | tr '\n' ' ' | sed 's/" *: *"/":"/g' | grep -o '"clientId":"openchoreo-workload-publisher-client"[^}]*"id":"[^"]*"\|"id":"[^"]*"[^}]*"clientId":"openchoreo-workload-publisher-client"' | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
 
       APP_PAYLOAD='{
         "name": "Workload Publisher",
         "description": "OpenChoreo Workload Publisher Client for creating workloads from CI workflows",
+        "ouId": "__ORG_UNIT_ID__",
+        "type": "m2m",
         "inboundAuthConfig": [
           {
             "type": "oauth2",
@@ -813,14 +860,18 @@ bootstrap:
               "pkceRequired": false,
               "publicClient": false,
               "token": {
-                "access_token": {
-                  "validityPeriod": 3600
+                "accessToken": {
+                  "clientConfig": {
+                    "validityPeriod": 3600
+                  }
                 }
               }
             }
           }
         ]
       }'
+
+      APP_PAYLOAD="${APP_PAYLOAD//__ORG_UNIT_ID__/${ORG_UNIT_ID}}"
 
       if [ -n "$app_id" ]; then
         log_info "Workload Publisher application already exists (id: $app_id), updating..."
@@ -855,11 +906,15 @@ bootstrap:
       log_info "Checking if application 'OpenChoreo Observer Resource Reader' already exists..."
       existing_apps=$(curl -s --max-time 10 "${THUNDER_URL}/applications")
 
+      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
       app_id=$(echo "$existing_apps" | tr '\n' ' ' | sed 's/" *: *"/":"/g' | grep -o '"name":"OpenChoreo Observer Resource Reader"[^}]*"id":"[^\"]*"\|"id":"[^\"]*"[^}]*"name":"OpenChoreo Observer Resource Reader"' | grep -o '"id":"[^\"]*"' | head -1 | cut -d'"' -f4)
 
       APP_PAYLOAD='{
         "name": "OpenChoreo Observer Resource Reader",
         "description": "OpenChoreo Observer Resource Reader Client",
+        "ouId": "__ORG_UNIT_ID__",
+        "type": "m2m",
         "inboundAuthConfig": [
           {
             "type": "oauth2",
@@ -873,14 +928,18 @@ bootstrap:
               "pkceRequired": false,
               "publicClient": false,
               "token": {
-                "access_token": {
-                  "validityPeriod": 3600
+                "accessToken": {
+                  "clientConfig": {
+                    "validityPeriod": 3600
+                  }
                 }
               }
             }
           }
         ]
       }'
+
+      APP_PAYLOAD="${APP_PAYLOAD//__ORG_UNIT_ID__/${ORG_UNIT_ID}}"
 
       if [ -n "$app_id" ]; then
         log_info "Application 'OpenChoreo Observer Resource Reader' already exists (id: $app_id), updating..."
@@ -915,11 +974,15 @@ bootstrap:
       log_info "Checking if FinOps Agent application already exists..."
       existing_apps=$(curl -s --max-time 10 "${THUNDER_URL}/applications")
 
+      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
       app_id=$(echo "$existing_apps" | tr '\n' ' ' | sed 's/" *: *"/":"/g' | grep -o '"clientId":"openchoreo-finops-agent"[^}]*"id":"[^"]*"\|"id":"[^"]*"[^}]*"clientId":"openchoreo-finops-agent"' | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
 
       APP_PAYLOAD='{
         "name": "FinOps Agent",
         "description": "OpenChoreo FinOps Agent Client",
+        "ouId": "__ORG_UNIT_ID__",
+        "type": "m2m",
         "inboundAuthConfig": [
           {
             "type": "oauth2",
@@ -933,14 +996,18 @@ bootstrap:
               "pkceRequired": false,
               "publicClient": false,
               "token": {
-                "access_token": {
-                  "validityPeriod": 3600
+                "accessToken": {
+                  "clientConfig": {
+                    "validityPeriod": 3600
+                  }
                 }
               }
             }
           }
         ]
       }'
+
+      APP_PAYLOAD="${APP_PAYLOAD//__ORG_UNIT_ID__/${ORG_UNIT_ID}}"
 
       if [ -n "$app_id" ]; then
         log_info "FinOps Agent application already exists (id: $app_id), updating..."
@@ -975,11 +1042,15 @@ bootstrap:
       log_info "Checking if application 'MCP E2E Subject' already exists..."
       existing_apps=$(curl -s --max-time 10 "${THUNDER_URL}/applications")
 
+      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+
       app_id=$(echo "$existing_apps" | tr '\n' ' ' | sed 's/" *: *"/":"/g' | grep -o '"clientId":"mcp-e2e-subject-client"[^}]*"id":"[^"]*"\|"id":"[^"]*"[^}]*"clientId":"mcp-e2e-subject-client"' | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
 
       APP_PAYLOAD='{
         "name": "MCP E2E Subject",
         "description": "Permission-less client_credentials subject for MCP e2e authorization tests. Intentionally has NO ClusterAuthzRoleBinding.",
+        "ouId": "__ORG_UNIT_ID__",
+        "type": "m2m",
         "inboundAuthConfig": [
           {
             "type": "oauth2",
@@ -993,14 +1064,18 @@ bootstrap:
               "pkceRequired": false,
               "publicClient": false,
               "token": {
-                "access_token": {
-                  "validityPeriod": 3600
+                "accessToken": {
+                  "clientConfig": {
+                    "validityPeriod": 3600
+                  }
                 }
               }
             }
           }
         ]
       }'
+
+      APP_PAYLOAD="${APP_PAYLOAD//__ORG_UNIT_ID__/${ORG_UNIT_ID}}"
 
       if [ -n "$app_id" ]; then
         log_info "Application 'MCP E2E Subject' already exists (id: $app_id), updating..."
