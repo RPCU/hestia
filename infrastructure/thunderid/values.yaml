@@ -95,24 +95,33 @@ bootstrap:
           type: "string"
           displayName: "Username"
           required: true
+          unique: true
+        sub:
+          type: "string"
+          displayName: "Subject"
+          required: false
         password:
           type: "string"
           displayName: "Password"
-          required: true
+          required: false
           credential: true
         given_name:
           type: "string"
           displayName: "First Name"
-          required: true
+          required: false
         family_name:
           type: "string"
           displayName: "Last Name"
-          required: true
+          required: false
         email:
           type: "string"
           displayName: "Email"
           required: true
           unique: true
+        name:
+          type: "string"
+          displayName: "Full Name"
+          required: false
     71-openchoreo-users.yaml: |
       resource_type: "user"
       id: "019a0000-0000-7000-8000-000000000030"
