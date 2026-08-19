@@ -1,0 +1,10 @@
+namespace: flux-system
+resources:
+  - helmrepo.yaml
+  - helmrelease.yaml
+configMapGenerator:
+  - name: thunderid-values
+    files:
+      - values.yaml
+generatorOptions:
+  disableNameSuffixHash: true

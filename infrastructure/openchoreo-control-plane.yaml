@@ -36,10 +36,8 @@ spec:
         server:
           publicUrl: "https://api.platform.rpcu.lan"
         security:
-          authentication:
-            jwt:
-              jwks:
-                skip_tls_verify: true
+          authorization:
+            resync_interval: 5m
       http:
         hostnames:
           - "api.platform.rpcu.lan"
@@ -68,14 +66,24 @@ spec:
           - "console.platform.rpcu.lan"
       tls:
         enabled: true
+      # Backstage's Node runtime must trust ThunderID's TLS (served by the
+      # control-plane gateway with the private vault-issuer CA). Instead of
+      # disabling verification, mount the rpcu-ca-trust bundle and point
+      # NODE_EXTRA_CA_CERTS at it so Node trusts the private CA chain.
+      extraVolumes:
+        - name: rpcu-ca-trust
+          configMap:
+            name: rpcu-ca-trust
+      extraVolumeMounts:
+        - name: rpcu-ca-trust
+          mountPath: /etc/ssl/rpcu
+          readOnly: true
+      extraEnv:
+        - name: NODE_EXTRA_CA_CERTS
+          value: /etc/ssl/rpcu/ca.crt
       auth:
         redirectUrls:
           - "https://console.platform.rpcu.lan/api/auth/openchoreo-auth/handler/frame"
-        clientId: "386690213738473333"
-        serviceClientId: "openchoreo-backstage"
-        serviceClientSecretKey: "service-client-secret"
-        oidcScope: "openid profile email offline_access groups"
-        scope: "openid"
       openchoreoApi:
         url: "http://openchoreo-api:8080"
       features:
@@ -84,10 +92,18 @@ spec:
             enabled: false
     security:
       oidc:
-        issuer: "https://rpcu-gabeck.eu1.zitadel.cloud"
-        jwksUrl: "https://rpcu-gabeck.eu1.zitadel.cloud/oauth/v2/keys"
-        authorizationUrl: "https://rpcu-gabeck.eu1.zitadel.cloud/oauth/v2/authorize"
-        tokenUrl: "https://rpcu-gabeck.eu1.zitadel.cloud/oauth/v2/token"
+        # Rule: browser-facing endpoints stay external HTTPS; server-to-server
+        # calls go in-cluster over plain HTTP (Thunder serves HTTP on :8080,
+        # httpOnly=true — TLS is terminated at the gateway):
+        #   - jwksUrl  -> fetched by openchoreo-api
+        #   - tokenUrl -> code->token exchange by the Backstage backend
+        # issuer + authorizationUrl stay external (canonical id + browser redirect).
+        # Backstage keeps rpcu-ca-trust because it still validates/discovers
+        # against the external issuer over HTTPS.
+        issuer: "https://thunderid.platform.rpcu.lan"
+        authorizationUrl: "https://thunderid.platform.rpcu.lan/oauth2/authorize"
+        jwksUrl: "http://thunderid.thunderid.svc.cluster.local:8080/oauth2/jwks"
+        tokenUrl: "http://thunderid.thunderid.svc.cluster.local:8080/oauth2/token"
     gateway:
       tls:
         enabled: true

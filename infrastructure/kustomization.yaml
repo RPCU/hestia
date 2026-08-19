@@ -2,5 +2,6 @@ resources:
   - fluxcd.yaml
   - cnpg.yaml
   - openchoreo-requirements.yaml
+  - thunderid.yaml
   - openchoreo-control-plane.yaml
   - openchoreo-resources.yaml
