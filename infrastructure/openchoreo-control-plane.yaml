@@ -71,10 +71,6 @@ spec:
           - "https://console.platform.rpcu.lan/api/auth/openchoreo-auth/handler/frame"
       openchoreoApi:
         url: "http://openchoreo-api:8080"
-      features:
-        auth:
-          redirectFlow:
-            enabled: false
     security:
       oidc:
         # Rule: browser-facing endpoints stay external HTTPS; server-to-server
