@@ -40,6 +40,17 @@ configuration:
       - "https://console.platform.rpcu.lan"
 setup:
   enabled: true
+  env:
+    - name: BACKSTAGE_CLIENT_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: thunderid-bootstrap
+          key: backstage-client-secret
+    - name: ADMIN_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: thunderid-bootstrap
+          key: admin-password
 bootstrap:
   scripts:
     50-user-schema-and-users.sh: |
@@ -202,7 +213,7 @@ bootstrap:
         log_info "Group '${group_name}' created successfully"
       }
 
-      ADMIN_ID=$(ensure_user "admin@openchoreo.dev"            "Admin@123" "Admin"     "User")
+      ADMIN_ID=$(ensure_user "admin@openchoreo.dev"            "${ADMIN_PASSWORD}" "Admin"     "User")
       DEVELOPER_ID=$(ensure_user "developer@openchoreo.dev"   "Dev@123"   "Developer" "User")
       PE_ID=$(ensure_user "platform-engineer@openchoreo.dev"  "PE@123"    "Platform"  "Engineer")
       SRE_ID=$(ensure_user "sre@openchoreo.dev"               "SRE@123"   "SRE"       "User")
@@ -236,7 +247,7 @@ bootstrap:
             "type": "oauth2",
             "config": {
               "client_id": "openchoreo-backstage-client",
-              "client_secret": "backstage-portal-secret",
+              "client_secret": "__BACKSTAGE_CLIENT_SECRET__",
               "redirect_uris": [
                 "https://console.platform.rpcu.lan/api/auth/openchoreo-auth/handler/frame"
               ],
@@ -289,6 +300,10 @@ bootstrap:
           }
         ]
       }'
+
+      # Inject the strong Backstage OAuth client secret from the setup-job env
+      # (sourced from the thunderid-bootstrap Secret) rather than a Git literal.
+      APP_PAYLOAD="${APP_PAYLOAD//__BACKSTAGE_CLIENT_SECRET__/${BACKSTAGE_CLIENT_SECRET}}"
 
       if [ -n "$app_id" ]; then
         log_info "Application 'Backstage' already exists (id: $app_id), updating..."

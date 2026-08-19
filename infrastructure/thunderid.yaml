@@ -5,6 +5,8 @@ metadata:
   namespace: flux-system
 spec:
   interval: 10m
+  dependsOn:
+    - name: openchoreo-requirements
   sourceRef:
     kind: GitRepository
     name: hestia
