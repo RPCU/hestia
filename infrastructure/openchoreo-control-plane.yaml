@@ -74,7 +74,7 @@ spec:
     security:
       oidc:
         # Rule: browser-facing endpoints stay external HTTPS; server-to-server
-        # calls go in-cluster over plain HTTP (Thunder serves HTTP on :8080,
+        # calls go in-cluster over plain HTTP (Thunder serves HTTP on :8090,
         # httpOnly=true — TLS is terminated at the gateway):
         #   - jwksUrl  -> fetched by openchoreo-api
         #   - tokenUrl -> code->token exchange by the Backstage backend
@@ -83,8 +83,8 @@ spec:
         # against the external issuer over HTTPS.
         issuer: "https://thunderid.platform.rpcu.lan"
         authorizationUrl: "https://thunderid.platform.rpcu.lan/oauth2/authorize"
-        jwksUrl: "http://thunderid.thunderid.svc.cluster.local:8080/oauth2/jwks"
-        tokenUrl: "http://thunderid.thunderid.svc.cluster.local:8080/oauth2/token"
+        jwksUrl: "http://thunderid-service.thunderid.svc.cluster.local:8090/oauth2/jwks"
+        tokenUrl: "http://thunderid-service.thunderid.svc.cluster.local:8090/oauth2/token"
     gateway:
       tls:
         enabled: true
