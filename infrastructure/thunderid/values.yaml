@@ -39,6 +39,14 @@ configuration:
   # Gate client path only — hostname/port/scheme default to server.publicUrl.
   gateClient:
     path: "/gate"
+  # The ThunderID Console sends an RFC 8707 resource indicator on token requests
+  # that must match a registered resource server. The chart's shipped "System"
+  # resource server hardcodes identifier https://localhost:8090/mcp (it does NOT
+  # template publicUrl, despite the chart comment), while the console otherwise
+  # derives <publicUrl>/mcp — the mismatch yields invalid_target on /console.
+  # Pin the console to the actually-seeded identifier so login resolves.
+  consoleClient:
+    resourceIdentifier: "https://localhost:8090/mcp"
   # Branding shown in the Gate/Console UI. In 1.0.0 this is the supported knob
   # for the value the gate frontend reads as config.brand.product_name.
   brand:
