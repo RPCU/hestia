@@ -24,3 +24,7 @@ spec:
       remoteRef:
         key: thunderid
         property: admin-password
+    - secretKey: zitadel-client-secret
+      remoteRef:
+        key: thunderid
+        property: zitadel-client-secret

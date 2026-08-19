@@ -83,6 +83,9 @@ setup:
     - name: BACKSTAGE_CLIENT_SECRET
       secretName: thunderid-bootstrap
       secretKey: backstage-client-secret
+    - name: ZITADEL_CLIENT_SECRET
+      secretName: thunderid-bootstrap
+      secretKey: zitadel-client-secret
 # Custom declarative bootstrap resources (Pattern 1) — mounted ALONGSIDE the
 # chart's shipped defaults (default OU, Person user_type, admin user, flows,
 # Console app, themes). Applied by the in-process `thunderid bootstrap` importer.
@@ -218,6 +221,80 @@ bootstrap:
       members:
         - id: "019a0000-0000-7000-8000-000000000033"
           type: "user"
+    73-zitadel-connection.yaml: |
+      resource_type: "connection"
+      id: "019a0000-0000-7000-8000-000000000020"
+      name: "zitadel"
+      description: "RPCU Zitadel OIDC identity provider"
+      type: "oidc"
+      clientId: "386690213738473333"
+      clientSecret: "{{ .ZITADEL_CLIENT_SECRET }}"
+      redirectUri: "https://thunderid.platform.rpcu.lan/gate/callback"
+      authorizationEndpoint: "https://rpcu-gabeck.eu1.zitadel.cloud/oauth/v2/authorize"
+      tokenEndpoint: "https://rpcu-gabeck.eu1.zitadel.cloud/oauth/v2/token"
+      userInfoEndpoint: "https://rpcu-gabeck.eu1.zitadel.cloud/oidc/v1/userinfo"
+      jwksEndpoint: "https://rpcu-gabeck.eu1.zitadel.cloud/oauth/v2/keys"
+      issuer: "https://rpcu-gabeck.eu1.zitadel.cloud"
+      scopes:
+        - "openid"
+        - "email"
+        - "profile"
+      attributeConfiguration:
+        userTypeResolution:
+          default: "openchoreo-user"
+        userTypeAttributeMappings:
+          - userType: "openchoreo-user"
+            attributes:
+              - externalAttribute: "email"
+                localAttribute: "username"
+              - externalAttribute: "email"
+                localAttribute: "email"
+              - externalAttribute: "given_name"
+                localAttribute: "given_name"
+              - externalAttribute: "family_name"
+                localAttribute: "family_name"
+        accountLinking:
+          attributes:
+            - "email"
+    74-federated-flow.yaml: |
+      resource_type: "flow"
+      id: "019a0000-0000-7000-8000-000000000021"
+      name: "OpenChoreo Zitadel Federated Auth"
+      handle: "openchoreo-federated-auth"
+      flowType: "AUTHENTICATION"
+      nodes:
+        - id: "start"
+          type: "START"
+          onSuccess: "zitadel_auth"
+        - id: "zitadel_auth"
+          type: "TASK_EXECUTION"
+          properties:
+            idpId: "019a0000-0000-7000-8000-000000000020"
+          executor:
+            name: "OIDCAuthExecutor"
+            inputs:
+              - ref: "code"
+                identifier: "code"
+                type: "TEXT_INPUT"
+                required: true
+          onSuccess: "provisioning"
+        - id: "provisioning"
+          type: "TASK_EXECUTION"
+          executor:
+            name: "ProvisioningExecutor"
+          onSuccess: "authorization"
+        - id: "authorization"
+          type: "TASK_EXECUTION"
+          executor:
+            name: "AuthorizationExecutor"
+          onSuccess: "auth_assert"
+        - id: "auth_assert"
+          type: "TASK_EXECUTION"
+          executor:
+            name: "AuthAssertExecutor"
+          onSuccess: "end"
+        - id: "end"
+          type: "END"
     80-backstage-app.yaml: |
       resource_type: "application"
       id: "019a0000-0000-7000-8000-000000000060"
@@ -228,7 +305,7 @@ bootstrap:
       logoUrl: "https://cdn.statically.io/gh/openchoreo/openchoreo.github.io@main/static/img/openchoreo-logo.png"
       allowedUserTypes:
         - "openchoreo-user"
-      authFlowId: "01900000-0000-7000-8000-000000000061"
+      authFlowId: "019a0000-0000-7000-8000-000000000021"
       inboundAuthConfig:
         - type: "oauth2"
           config:
