@@ -35,6 +35,12 @@ configuration:
   passkey:
     allowedOrigins:
       - "https://console.platform.rpcu.lan"
+  # 0.36 enables the consent server by default with its own Postgres DB; we run
+  # SQLite-only and OpenChoreo doesn't use Thunder's consent flow (it was off in
+  # 0.28), so disable it — otherwise the setup job hangs waiting for the consent
+  # server, which fails to reach a non-existent Postgres at localhost:5432.
+  consent:
+    enabled: false
 setup:
   enabled: true
   env:
