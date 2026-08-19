@@ -8,11 +8,11 @@ spec:
   targetNamespace: thunderid
   chart:
     spec:
-      chart: thunder
-      version: "0.36.0"
+      chart: thunderid
+      version: "1.0.0"
       sourceRef:
         kind: HelmRepository
-        name: asgardeo
+        name: thunder-id
         namespace: flux-system
   upgrade:
     remediation:
@@ -21,35 +21,3 @@ spec:
     - kind: ConfigMap
       name: thunderid-values
       valuesKey: values.yaml
-  # The Thunder 0.36.0 chart generates the gate runtime config (config.js) with
-  # only `client` + `server`, but the bundled gate frontend reads
-  # `config.brand.product_name` WITHOUT optional chaining — so a missing `brand`
-  # crashes the sign-in SPA with a blank page (Uncaught TypeError: Cannot read
-  # properties of undefined (reading 'product_name')). The chart exposes no
-  # `brand` value, so patch the generated ConfigMap to inject it.
-  postRenderers:
-    - kustomize:
-        patches:
-          - target:
-              version: v1
-              kind: ConfigMap
-              name: thunderid-config-map
-            patch: |
-              - op: replace
-                path: /data/gate-config.js
-                value: |
-                  /* eslint-disable no-underscore-dangle */
-                  window.__THUNDER_RUNTIME_CONFIG__ = {
-                    client: {
-                      base: "/gate",
-                    },
-                    server: {
-                      hostname: "0.0.0.0",
-                      port: 8090,
-                      http_only: true,
-                      public_url: "https://thunderid.platform.rpcu.lan",
-                    },
-                    brand: {
-                      product_name: "ThunderID",
-                    },
-                  };

@@ -1,3 +1,6 @@
+# ThunderID (Thunder) — official chart oci://ghcr.io/thunder-id/helm-charts/thunderid v1.0.0.
+# Migrated from the pre-release asgardeo/thunder 0.36.0 chart (whose gate frontend
+# had diverged from the generated config.js, causing a blank sign-in page).
 fullnameOverride: thunderid
 httproute:
   enabled: true
@@ -8,1087 +11,506 @@ httproute:
     - thunderid.platform.rpcu.lan
 ingress:
   enabled: false
-# SQLite requires a single writer pod
+# SQLite requires a single writer pod.
 deployment:
   replicaCount: 1
 hpa:
   enabled: false
+# Persist the SQLite databases across pod restarts/reschedules (REQUIRED — without
+# this PVC all identity data is lost when the pod restarts).
+persistence:
+  enabled: true
+  size: 2Gi
+# The setup job generates per-install TLS/JWT/AES key material onto this PVC; it
+# MUST persist for the life of the deployment (losing it invalidates all issued
+# tokens and previously-encrypted data).
+certs:
+  persistence:
+    size: 16Mi
+# The setup job generates the Direct-Auth-Secret onto this PVC.
+secrets:
+  persistence:
+    size: 16Mi
 configuration:
   server:
     httpOnly: true
+    identifier: production
     publicUrl: "https://thunderid.platform.rpcu.lan"
+  # Gate client path only — hostname/port/scheme default to server.publicUrl.
   gateClient:
-    hostname: "thunderid.platform.rpcu.lan"
-    port: 443
-    scheme: "https"
+    path: "/gate"
+  # Branding shown in the Gate/Console UI. In 1.0.0 this is the supported knob
+  # for the value the gate frontend reads as config.brand.product_name.
+  brand:
+    productName: "ThunderID"
+  # 1.0.0 uses FOUR databases (was 3 in 0.36). SQLite for all; the chart's default
+  # sqlite sub-block supplies path/options, so we only pin the type.
   database:
     config:
       type: sqlite
-    runtime:
+    runtime_transient:
       type: sqlite
-    user:
+    entity:
       type: sqlite
-  cors:
-    allowedOrigins:
-      - "https://console.platform.rpcu.lan"
-      - "http://localhost:7007"
+    runtime_persistent:
+      type: sqlite
   passkey:
     allowedOrigins:
       - "https://console.platform.rpcu.lan"
-  # 0.36 enables the consent server by default with its own Postgres DB; we run
-  # SQLite-only and OpenChoreo doesn't use Thunder's consent flow (it was off in
-  # 0.28), so disable it — otherwise the setup job hangs waiting for the consent
-  # server, which fails to reach a non-existent Postgres at localhost:5432.
-  consent:
-    enabled: false
 setup:
   enabled: true
+  # Strong ThunderID Console admin password (username defaults to "admin") from Vault/ESO.
+  admin:
+    username: "admin"
+    passwordRef:
+      name: thunderid-bootstrap
+      key: admin-password
+  # Extra env exposed to the bootstrap importer's Go-template context.
   env:
-    # Don't abort the whole bootstrap if a (non-critical) app script fails on
-    # the 0.36 API while the app payloads are being migrated; the essential
-    # apps (backstage) still get created.
-    - name: BOOTSTRAP_FAIL_FAST
-      value: "false"
+    - name: PUBLIC_URL
+      value: "https://thunderid.platform.rpcu.lan"
+  # Strong Backstage OAuth client secret from Vault/ESO — referenced in the
+  # Backstage application resource below as {{ .BACKSTAGE_CLIENT_SECRET }}.
+  secretEnv:
     - name: BACKSTAGE_CLIENT_SECRET
-      valueFrom:
-        secretKeyRef:
-          name: thunderid-bootstrap
-          key: backstage-client-secret
-    - name: ADMIN_PASSWORD
-      valueFrom:
-        secretKeyRef:
-          name: thunderid-bootstrap
-          key: admin-password
+      secretName: thunderid-bootstrap
+      secretKey: backstage-client-secret
+# Custom declarative bootstrap resources (Pattern 1) — mounted ALONGSIDE the
+# chart's shipped defaults (default OU, Person user_type, admin user, flows,
+# Console app, themes). Applied by the in-process `thunderid bootstrap` importer.
+# Each document is a resource definition (resource_type: ...), NOT a shell script.
 bootstrap:
   scripts:
-    50-user-schema-and-users.sh: |
-      #!/bin/bash
-      set -e
-
-      THUNDER_URL="http://localhost:8090"
-
-      log_info "Checking if default organization unit exists..."
-      if ! curl -s --max-time 10 "${THUNDER_URL}/organization-units" | grep -q '"handle" *: *"default"'; then
-        log_info "Creating default organization unit..."
-        curl --location "${THUNDER_URL}/organization-units" \
-          --header 'Content-Type: application/json' \
-          --header 'Accept: application/json' \
-          --data '{
-            "name": "Default",
-            "handle": "default",
-            "description": "Default organizational unit"
-          }' \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-        log_info "Default organization unit created successfully"
-      else
-        log_info "Default organization unit already exists"
-      fi
-
-      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-      if [ -z "$ORG_UNIT_ID" ]; then
-        log_error "Failed to resolve default organization unit ID from ${THUNDER_URL}"
-        exit 1
-      fi
-      log_info "Using organization unit ID: $ORG_UNIT_ID"
-
-      log_info "Checking if user schema 'openchoreo-user' already exists..."
-      existing_schemas=$(curl -s --max-time 10 "${THUNDER_URL}/user-schemas")
-
-      if echo "$existing_schemas" | grep -q '"name" *: *"openchoreo-user"'; then
-        log_info "User schema 'openchoreo-user' already exists, skipping creation"
-      else
-        log_info "User schema does not exist, creating user schema..."
-        curl --location "${THUNDER_URL}/user-schemas" \
-          --header 'accept: application/json' \
-          --header 'Content-Type: application/json' \
-          --data "{
-            \"name\": \"openchoreo-user\",
-            \"ouId\": \"$ORG_UNIT_ID\",
-            \"allowSelfRegistration\": true,
-            \"systemAttributes\": {
-              \"display\": \"username\"
-            },
-            \"schema\": {
-              \"username\": {
-                \"type\": \"string\",
-                \"required\": true,
-                \"displayName\": \"Username\"
-              },
-              \"password\": {
-                \"type\": \"string\",
-                \"required\": true,
-                \"credential\": true,
-                \"displayName\": \"Password\"
-              },
-              \"given_name\": {
-                \"type\": \"string\",
-                \"required\": true,
-                \"displayName\": \"First Name\"
-              },
-              \"family_name\": {
-                \"type\": \"string\",
-                \"required\": true,
-                \"displayName\": \"Last Name\"
-              },
-              \"email\": {
-                \"type\": \"string\",
-                \"required\": true,
-                \"unique\": true,
-                \"displayName\": \"Email\"
-              }
-            }
-          }" \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-
-        log_info "User schema created successfully"
-      fi
-
-      # Returns the ID of an existing user by username, or creates and returns it.
-      # Usage: ensure_user <username> <password> <given_name> <family_name>
-      ensure_user() {
-        local username="$1" password="$2" given_name="$3" family_name="$4"
-        local existing_users user_id response
-
-        existing_users=$(curl -s --max-time 10 "${THUNDER_URL}/users")
-        if echo "$existing_users" | grep -q "\"username\" *: *\"${username}\""; then
-          log_info "User '${username}' already exists, getting ID..." >&2
-          user_id=$(echo "$existing_users" | tr '\n' ' ' | sed 's/" *: *"/":"/g' \
-            | grep -o "\"username\":\"${username}\"[^}]*\"id\":\"[^\"]*\"\|\"id\":\"[^\"]*\"[^}]*\"username\":\"${username}\"" \
-            | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-        else
-          log_info "Creating user '${username}'..." >&2
-          response=$(curl --location "${THUNDER_URL}/users" \
-            --header 'accept: application/json' \
-            --header 'Content-Type: application/json' \
-            --data "{
-              \"type\": \"openchoreo-user\",
-              \"ouId\": \"$ORG_UNIT_ID\",
-              \"attributes\": {
-                \"username\": \"${username}\",
-                \"email\": \"${username}\",
-                \"password\": \"${password}\",
-                \"given_name\": \"${given_name}\",
-                \"family_name\": \"${family_name}\"
-              }
-            }" \
-            --fail-with-body \
-            --max-time 30 \
-            --retry 3 \
-            --retry-delay 5)
-          log_info "User '${username}' created successfully" >&2
-          user_id=$(echo "$response" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-        fi
-        echo "$user_id"
-      }
-
-      # Creates a group with a single member if it does not already exist.
-      # Usage: ensure_group <group_name> <description> <member_user_id>
-      ensure_group() {
-        local group_name="$1" description="$2" member_id="$3"
-        local existing_groups group_members
-
-        existing_groups=$(curl -s --max-time 10 "${THUNDER_URL}/groups")
-        if echo "$existing_groups" | grep -q "\"name\" *: *\"${group_name}\""; then
-          log_info "Group '${group_name}' already exists, skipping creation"
-          return
-        fi
-
-        group_members=""
-        if [ -n "$member_id" ]; then
-          group_members="{\"type\":\"user\",\"id\":\"${member_id}\"}"
-        fi
-
-        log_info "Creating group '${group_name}'..."
-        curl --location "${THUNDER_URL}/groups" \
-          --header 'accept: application/json' \
-          --header 'Content-Type: application/json' \
-          --data "{
-            \"name\": \"${group_name}\",
-            \"ouId\": \"$ORG_UNIT_ID\",
-            \"description\": \"${description}\",
-            \"members\": [${group_members}]
-          }" \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-        log_info "Group '${group_name}' created successfully"
-      }
-
-      ADMIN_ID=$(ensure_user "admin@openchoreo.dev"            "${ADMIN_PASSWORD}" "Admin"     "User")
-      DEVELOPER_ID=$(ensure_user "developer@openchoreo.dev"   "Dev@123"   "Developer" "User")
-      PE_ID=$(ensure_user "platform-engineer@openchoreo.dev"  "PE@123"    "Platform"  "Engineer")
-      SRE_ID=$(ensure_user "sre@openchoreo.dev"               "SRE@123"   "SRE"       "User")
-
-      ensure_group "admins"             "Openchoreo Admins group"             "$ADMIN_ID"
-      ensure_group "developers"         "Openchoreo Developers group"         "$DEVELOPER_ID"
-      ensure_group "platform-engineers" "Openchoreo Platform Engineers group" "$PE_ID"
-      ensure_group "sres"               "Openchoreo SREs group"               "$SRE_ID"
-
-    51-backstage-app.sh: |
-      #!/bin/bash
-      set -e
-
-      THUNDER_URL="http://localhost:8090"
-
-      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-
-      log_info "Checking if application 'Backstage' already exists..."
-      existing_apps=$(curl -s --max-time 10 "${THUNDER_URL}/applications")
-
-      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-
-      app_id=$(echo "$existing_apps" | tr '\n' ' ' | sed 's/" *: *"/":"/g' | grep -o '"name":"Backstage"[^}]*"id":"[^"]*"\|"id":"[^"]*"[^}]*"name":"Backstage"' | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-
-      APP_PAYLOAD='{
-        "name": "Backstage",
-        "description": "OpenChoreo Backstage Portal",
-        "ouId": "__ORG_UNIT_ID__",
-        "type": "custom",
-        "logoUrl": "https://cdn.statically.io/gh/openchoreo/openchoreo.github.io@main/static/img/openchoreo-logo.png",
-        "allowedUserTypes": ["openchoreo-user"],
-        "assertion": {
-          "validityPeriod": 3600
-        },
-        "inboundAuthConfig": [
-          {
-            "type": "oauth2",
-            "config": {
-              "clientId": "openchoreo-backstage-client",
-              "clientSecret": "__BACKSTAGE_CLIENT_SECRET__",
-              "redirectUris": [
-                "https://console.platform.rpcu.lan/api/auth/openchoreo-auth/handler/frame"
-              ],
-              "grantTypes": [
-                "authorization_code",
-                "client_credentials",
-                "refresh_token"
-              ],
-              "responseTypes": [
-                "code"
-              ],
-              "tokenEndpointAuthMethod": "client_secret_post",
-              "pkceRequired": false,
-              "publicClient": false,
-              "token": {
-                "accessToken": {
-                  "userConfig": {
-                    "validityPeriod": 86400,
-                    "attributes": [
-                      "given_name",
-                      "family_name",
-                      "username",
-                      "groups"
-                    ]
-                  }
-                },
-                "idToken": {
-                  "validityPeriod": 86400,
-                  "userAttributes": [
-                    "given_name",
-                    "family_name",
-                    "username",
-                    "groups"
-                  ]
-                }
-              },
-              "scopeClaims": {
-                "email": [
-                  "email"
-                ],
-                "groups": [
-                  "groups"
-                ],
-                "profile": [
-                  "username",
-                  "given_name",
-                  "family_name",
-                  "picture"
-                ]
-              }
-            }
-          }
-        ]
-      }'
-
-      # Inject the strong Backstage OAuth client secret from the setup-job env
-      # (sourced from the thunderid-bootstrap Secret) and the resolved default
-      # org-unit ID into the single-quoted payload.
-      APP_PAYLOAD="${APP_PAYLOAD//__BACKSTAGE_CLIENT_SECRET__/${BACKSTAGE_CLIENT_SECRET}}"
-      APP_PAYLOAD="${APP_PAYLOAD//__ORG_UNIT_ID__/${ORG_UNIT_ID}}"
-
-      if [ -n "$app_id" ]; then
-        log_info "Application 'Backstage' already exists (id: $app_id), updating..."
-        curl --location -X PUT "${THUNDER_URL}/applications/$app_id" \
-          --header 'Content-Type: application/json' \
-          --data "$APP_PAYLOAD" \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-
-        log_info "Application updated successfully"
-      else
-        log_info "Application does not exist, creating default application..."
-        curl --location "${THUNDER_URL}/applications" \
-          --header 'Content-Type: application/json' \
-          --data "$APP_PAYLOAD" \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-
-        log_info "Default application created successfully"
-      fi
-
-    52-default-apps.sh: |
-      #!/bin/bash
-      set -e
-
-      THUNDER_URL="http://localhost:8090"
-
-      log_info "Checking if application 'Customer Portal' already exists..."
-      existing_apps=$(curl -s --max-time 10 "${THUNDER_URL}/applications")
-
-      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-
-      app_id=$(echo "$existing_apps" | tr '\n' ' ' | sed 's/" *: *"/":"/g' | grep -o '"clientId":"customer-portal-client"[^}]*"id":"[^"]*"\|"id":"[^"]*"[^}]*"clientId":"customer-portal-client"' | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-
-      APP_PAYLOAD='{
-        "name": "Customer Portal",
-        "description": "Customer Portal Application",
-        "ouId": "__ORG_UNIT_ID__",
-        "type": "m2m",
-        "inboundAuthConfig": [
-          {
-            "type": "oauth2",
-            "config": {
-              "clientId": "customer-portal-client",
-              "clientSecret": "supersecret",
-              "grantTypes": [
-                "client_credentials"
-              ],
-              "tokenEndpointAuthMethod": "client_secret_post",
-              "pkceRequired": false,
-              "publicClient": false,
-              "token": {
-                "accessToken": {
-                  "clientConfig": {
-                    "validityPeriod": 3600
-                  }
-                }
-              }
-            }
-          }
-        ]
-      }'
-
-      APP_PAYLOAD="${APP_PAYLOAD//__ORG_UNIT_ID__/${ORG_UNIT_ID}}"
-
-      if [ -n "$app_id" ]; then
-        log_info "Application 'Customer Portal' already exists (id: $app_id), updating..."
-        curl --location -X PUT "${THUNDER_URL}/applications/$app_id" \
-          --header 'Content-Type: application/json' \
-          --data "$APP_PAYLOAD" \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-
-        log_info "Application updated successfully"
-      else
-        log_info "Application 'Customer Portal' does not exist, creating..."
-        curl --location "${THUNDER_URL}/applications" \
-          --header 'Content-Type: application/json' \
-          --data "$APP_PAYLOAD" \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-
-        log_info "Application created successfully"
-      fi
-
-    53-rca-agent-client.sh: |
-      #!/bin/bash
-      set -e
-
-      THUNDER_URL="http://localhost:8090"
-
-      log_info "Checking if RCA Agent application already exists..."
-      existing_apps=$(curl -s --max-time 10 "${THUNDER_URL}/applications")
-
-      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-
-      app_id=$(echo "$existing_apps" | tr '\n' ' ' | sed 's/" *: *"/":"/g' | grep -o '"clientId":"openchoreo-rca-agent"[^}]*"id":"[^"]*"\|"id":"[^"]*"[^}]*"clientId":"openchoreo-rca-agent"' | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-
-      APP_PAYLOAD='{
-        "name": "RCA Agent",
-        "description": "OpenChoreo RCA Agent Client",
-        "ouId": "__ORG_UNIT_ID__",
-        "type": "m2m",
-        "inboundAuthConfig": [
-          {
-            "type": "oauth2",
-            "config": {
-              "clientId": "openchoreo-rca-agent",
-              "clientSecret": "openchoreo-rca-agent-secret",
-              "grantTypes": [
-                "client_credentials"
-              ],
-              "tokenEndpointAuthMethod": "client_secret_post",
-              "pkceRequired": false,
-              "publicClient": false,
-              "token": {
-                "accessToken": {
-                  "clientConfig": {
-                    "validityPeriod": 3600
-                  }
-                }
-              }
-            }
-          }
-        ]
-      }'
-
-      APP_PAYLOAD="${APP_PAYLOAD//__ORG_UNIT_ID__/${ORG_UNIT_ID}}"
-
-      if [ -n "$app_id" ]; then
-        log_info "RCA Agent application already exists (id: $app_id), updating..."
-        curl --location -X PUT "${THUNDER_URL}/applications/$app_id" \
-          --header 'Content-Type: application/json' \
-          --data "$APP_PAYLOAD" \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-
-        log_info "RCA Agent application updated successfully"
-      else
-        log_info "RCA Agent application does not exist, creating..."
-        curl --location "${THUNDER_URL}/applications" \
-          --header 'Content-Type: application/json' \
-          --data "$APP_PAYLOAD" \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-
-        log_info "RCA Agent application created successfully"
-      fi
-
-    54-cli-app.sh: |
-      #!/bin/bash
-      set -e
-
-      THUNDER_URL="http://localhost:8090"
-
-      log_info "Checking if application 'OpenChoreo CLI' already exists..."
-      existing_apps=$(curl -s --max-time 10 "${THUNDER_URL}/applications")
-
-      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-
-      app_id=$(echo "$existing_apps" | tr '\n' ' ' | sed 's/" *: *"/":"/g' | grep -o '"name":"OpenChoreo CLI"[^}]*"id":"[^\"]*"\|"id":"[^\"]*"[^}]*"name":"OpenChoreo CLI"' | grep -o '"id":"[^\"]*"' | head -1 | cut -d'"' -f4)
-
-      APP_PAYLOAD='{
-        "name": "OpenChoreo CLI",
-        "description": "OpenChoreo CLI Default Application",
-        "ouId": "__ORG_UNIT_ID__",
-        "type": "custom",
-        "logoUrl": "https://cdn.statically.io/gh/openchoreo/openchoreo.github.io@main/static/img/openchoreo-logo.png",
-        "allowedUserTypes": [
-          "openchoreo-user"
-        ],
-        "assertion": {
-          "validityPeriod": 3600
-        },
-        "inboundAuthConfig": [
-          {
-            "type": "oauth2",
-            "config": {
-              "clientId": "openchoreo-cli",
-              "redirectUris": [
-                "http://127.0.0.1:55152/auth-callback"
-              ],
-              "grantTypes": [
-                "authorization_code",
-                "refresh_token"
-              ],
-              "responseTypes": [
-                "code"
-              ],
-              "tokenEndpointAuthMethod": "none",
-              "pkceRequired": true,
-              "publicClient": true,
-              "token": {
-                "accessToken": {
-                  "userConfig": {
-                    "validityPeriod": 3600,
-                    "attributes": [
-                      "given_name",
-                      "family_name",
-                      "username",
-                      "groups"
-                    ]
-                  }
-                },
-                "idToken": {
-                  "validityPeriod": 3600,
-                  "userAttributes": [
-                    "given_name",
-                    "family_name",
-                    "username",
-                    "groups"
-                  ]
-                }
-              },
-              "scopeClaims": {
-                "email": [
-                  "email"
-                ],
-                "groups": [
-                  "groups"
-                ],
-                "profile": [
-                  "username",
-                  "given_name",
-                  "family_name",
-                  "picture",
-                  "groups"
-                ]
-              }
-            }
-          }
-        ]
-      }'
-
-      APP_PAYLOAD="${APP_PAYLOAD//__ORG_UNIT_ID__/${ORG_UNIT_ID}}"
-
-      if [ -n "$app_id" ]; then
-        log_info "Application 'OpenChoreo CLI' already exists (id: $app_id), updating..."
-        curl --location -X PUT "${THUNDER_URL}/applications/$app_id" \
-          --header 'Content-Type: application/json' \
-          --data "$APP_PAYLOAD" \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-
-        log_info "Application updated successfully"
-      else
-        log_info "Application does not exist, creating default CLI application..."
-        curl --location "${THUNDER_URL}/applications" \
-          --header 'Content-Type: application/json' \
-          --data "$APP_PAYLOAD" \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-
-        log_info "Default CLI application created successfully"
-      fi
-
-    55-system-app.sh: |
-      #!/bin/bash
-      set -e
-
-      THUNDER_URL="http://localhost:8090"
-
-      log_info "Checking if system application already exists..."
-      existing_apps=$(curl -s --max-time 10 "${THUNDER_URL}/applications")
-
-      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-
-      app_id=$(echo "$existing_apps" | tr '\n' ' ' | sed 's/" *: *"/":"/g' | grep -o '"clientId":"openchoreo-system-app"[^}]*"id":"[^"]*"\|"id":"[^"]*"[^}]*"clientId":"openchoreo-system-app"' | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-
-      APP_PAYLOAD='{
-        "name": "System Application",
-        "description": "Generic system application for automation and integrations",
-        "ouId": "__ORG_UNIT_ID__",
-        "type": "m2m",
-        "inboundAuthConfig": [
-          {
-            "type": "oauth2",
-            "config": {
-              "clientId": "openchoreo-system-app",
-              "clientSecret": "openchoreo-system-app-secret",
-              "grantTypes": [
-                "client_credentials"
-              ],
-              "tokenEndpointAuthMethod": "client_secret_post",
-              "pkceRequired": false,
-              "publicClient": false,
-              "token": {
-                "accessToken": {
-                  "clientConfig": {
-                    "validityPeriod": 3600
-                  }
-                }
-              }
-            }
-          }
-        ]
-      }'
-
-      APP_PAYLOAD="${APP_PAYLOAD//__ORG_UNIT_ID__/${ORG_UNIT_ID}}"
-
-      if [ -n "$app_id" ]; then
-        log_info "System application already exists (id: $app_id), updating..."
-        curl --location -X PUT "${THUNDER_URL}/applications/$app_id" \
-          --header 'Content-Type: application/json' \
-          --data "$APP_PAYLOAD" \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-
-        log_info "System application updated successfully"
-      else
-        log_info "System application does not exist, creating..."
-        curl --location "${THUNDER_URL}/applications" \
-          --header 'Content-Type: application/json' \
-          --data "$APP_PAYLOAD" \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-
-        log_info "System application created successfully"
-      fi
-
-    56-user-mcp-app.sh: |
-      #!/bin/bash
-      set -e
-
-      THUNDER_URL="http://localhost:8090"
-
-      log_info "Checking if application 'User MCP App' already exists..."
-      existing_apps=$(curl -s --max-time 10 "${THUNDER_URL}/applications")
-
-      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-
-      # Extract application ID if it exists
-      app_id=$(echo "$existing_apps" | tr '\n' ' ' | sed 's/" *: *"/":"/g' | grep -o '"name":"User MCP App"[^}]*"id":"[^\"]*"\|"id":"[^\"]*"[^}]*"name":"User MCP App"' | grep -o '"id":"[^\"]*"' | head -1 | cut -d'"' -f4)
-
-      # Define the application payload
-      APP_PAYLOAD='{
-        "name": "User MCP App",
-        "description": "User MCP app to be used by terminals and user facing AI agents",
-        "ouId": "__ORG_UNIT_ID__",
-        "type": "mcp",
-        "allowedUserTypes": [
-          "openchoreo-user"
-        ],
-        "assertion": {
-          "validityPeriod": 3600
-        },
-        "inboundAuthConfig": [
-          {
-            "type": "oauth2",
-            "config": {
-              "clientId": "user_mcp_client",
-              "redirectUris": [
-                "http://localhost:8075/callback",
-                "cursor://anysphere.cursor-mcp/oauth/callback",
-                "http://127.0.0.1:19876/mcp/oauth/callback"
-              ],
-              "grantTypes": [
-                "authorization_code",
-                "refresh_token"
-              ],
-              "responseTypes": [
-                "code"
-              ],
-              "tokenEndpointAuthMethod": "none",
-              "pkceRequired": true,
-              "publicClient": true,
-              "token": {
-                "accessToken": {
-                  "userConfig": {
-                    "validityPeriod": 86400,
-                    "attributes": [
-                      "given_name",
-                      "family_name",
-                      "username",
-                      "groups"
-                    ]
-                  }
-                },
-                "idToken": {
-                  "validityPeriod": 86400,
-                  "userAttributes": [
-                    "given_name",
-                    "family_name",
-                    "username",
-                    "groups"
-                  ]
-                }
-              }
-            }
-          }
-        ]
-      }'
-
-      APP_PAYLOAD="${APP_PAYLOAD//__ORG_UNIT_ID__/${ORG_UNIT_ID}}"
-
-      if [ -n "$app_id" ]; then
-        log_info "Application 'User MCP App' already exists (id: $app_id), updating..."
-        curl --location -X PUT "${THUNDER_URL}/applications/$app_id" \
-          --header 'Content-Type: application/json' \
-          --data "$APP_PAYLOAD" \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-
-        log_info "Application updated successfully"
-      else
-        log_info "Application does not exist, creating default application..."
-        curl --location "${THUNDER_URL}/applications" \
-          --header 'Content-Type: application/json' \
-          --data "$APP_PAYLOAD" \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-
-        log_info "User MCP App application created successfully"
-      fi
-
-    57-service-mcp-app.sh: |
-      #!/bin/bash
-      set -e
-
-      THUNDER_URL="http://localhost:8090"
-
-      log_info "Checking if application 'Service MCP App' already exists..."
-      existing_apps=$(curl -s --max-time 10 "${THUNDER_URL}/applications")
-
-      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-
-      # Extract application ID if it exists
-      app_id=$(echo "$existing_apps" | tr '\n' ' ' | sed 's/" *: *"/":"/g' | grep -o '"name":"Service MCP App"[^}]*"id":"[^\"]*"\|"id":"[^\"]*"[^}]*"name":"Service MCP App"' | grep -o '"id":"[^\"]*"' | head -1 | cut -d'"' -f4)
-
-      # Define the application payload
-      APP_PAYLOAD='{
-        "name": "Service MCP App",
-        "description": "Service MCP app to be used by backend services which can securely store the secret",
-        "ouId": "__ORG_UNIT_ID__",
-        "type": "m2m",
-        "inboundAuthConfig": [
-          {
-            "type": "oauth2",
-            "config": {
-              "clientId": "service_mcp_client",
-              "clientSecret": "service_mcp_client_secret",
-              "grantTypes": [
-                "client_credentials"
-              ],
-              "tokenEndpointAuthMethod": "client_secret_basic",
-              "token": {
-                "accessToken": {
-                  "clientConfig": {
-                    "validityPeriod": 86400
-                  }
-                }
-              }
-            }
-          }
-        ]
-      }'
-
-      APP_PAYLOAD="${APP_PAYLOAD//__ORG_UNIT_ID__/${ORG_UNIT_ID}}"
-
-      if [ -n "$app_id" ]; then
-        log_info "Application 'Service MCP App' already exists (id: $app_id), updating..."
-        curl --location -X PUT "${THUNDER_URL}/applications/$app_id" \
-          --header 'Content-Type: application/json' \
-          --data "$APP_PAYLOAD" \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-
-        log_info "Application updated successfully"
-      else
-        log_info "Application does not exist, creating default application..."
-        curl --location "${THUNDER_URL}/applications" \
-          --header 'Content-Type: application/json' \
-          --data "$APP_PAYLOAD" \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-
-        log_info "Service MCP App application created successfully"
-      fi
-
-    58-workload-publisher-app.sh: |
-      #!/bin/bash
-      set -e
-
-      THUNDER_URL="http://localhost:8090"
-
-      log_info "Checking if Workload Publisher application already exists..."
-      existing_apps=$(curl -s --max-time 10 "${THUNDER_URL}/applications")
-
-      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-
-      app_id=$(echo "$existing_apps" | tr '\n' ' ' | sed 's/" *: *"/":"/g' | grep -o '"clientId":"openchoreo-workload-publisher-client"[^}]*"id":"[^"]*"\|"id":"[^"]*"[^}]*"clientId":"openchoreo-workload-publisher-client"' | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-
-      APP_PAYLOAD='{
-        "name": "Workload Publisher",
-        "description": "OpenChoreo Workload Publisher Client for creating workloads from CI workflows",
-        "ouId": "__ORG_UNIT_ID__",
-        "type": "m2m",
-        "inboundAuthConfig": [
-          {
-            "type": "oauth2",
-            "config": {
-              "clientId": "openchoreo-workload-publisher-client",
-              "clientSecret": "openchoreo-workload-publisher-secret",
-              "grantTypes": [
-                "client_credentials"
-              ],
-              "tokenEndpointAuthMethod": "client_secret_post",
-              "pkceRequired": false,
-              "publicClient": false,
-              "token": {
-                "accessToken": {
-                  "clientConfig": {
-                    "validityPeriod": 3600
-                  }
-                }
-              }
-            }
-          }
-        ]
-      }'
-
-      APP_PAYLOAD="${APP_PAYLOAD//__ORG_UNIT_ID__/${ORG_UNIT_ID}}"
-
-      if [ -n "$app_id" ]; then
-        log_info "Workload Publisher application already exists (id: $app_id), updating..."
-        curl --location -X PUT "${THUNDER_URL}/applications/$app_id" \
-          --header 'Content-Type: application/json' \
-          --data "$APP_PAYLOAD" \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-
-        log_info "Workload Publisher application updated successfully"
-      else
-        log_info "Workload Publisher application does not exist, creating..."
-        curl --location "${THUNDER_URL}/applications" \
-          --header 'Content-Type: application/json' \
-          --data "$APP_PAYLOAD" \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-
-        log_info "Workload Publisher application created successfully"
-      fi
-
-    59-openchoreo-observer-app.sh: |
-      #!/bin/bash
-      set -e
-
-      THUNDER_URL="http://localhost:8090"
-
-      log_info "Checking if application 'OpenChoreo Observer Resource Reader' already exists..."
-      existing_apps=$(curl -s --max-time 10 "${THUNDER_URL}/applications")
-
-      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-
-      app_id=$(echo "$existing_apps" | tr '\n' ' ' | sed 's/" *: *"/":"/g' | grep -o '"name":"OpenChoreo Observer Resource Reader"[^}]*"id":"[^\"]*"\|"id":"[^\"]*"[^}]*"name":"OpenChoreo Observer Resource Reader"' | grep -o '"id":"[^\"]*"' | head -1 | cut -d'"' -f4)
-
-      APP_PAYLOAD='{
-        "name": "OpenChoreo Observer Resource Reader",
-        "description": "OpenChoreo Observer Resource Reader Client",
-        "ouId": "__ORG_UNIT_ID__",
-        "type": "m2m",
-        "inboundAuthConfig": [
-          {
-            "type": "oauth2",
-            "config": {
-              "clientId": "openchoreo-observer-resource-reader-client",
-              "clientSecret": "openchoreo-observer-resource-reader-client-secret",
-              "grantTypes": [
-                "client_credentials"
-              ],
-              "tokenEndpointAuthMethod": "client_secret_post",
-              "pkceRequired": false,
-              "publicClient": false,
-              "token": {
-                "accessToken": {
-                  "clientConfig": {
-                    "validityPeriod": 3600
-                  }
-                }
-              }
-            }
-          }
-        ]
-      }'
-
-      APP_PAYLOAD="${APP_PAYLOAD//__ORG_UNIT_ID__/${ORG_UNIT_ID}}"
-
-      if [ -n "$app_id" ]; then
-        log_info "Application 'OpenChoreo Observer Resource Reader' already exists (id: $app_id), updating..."
-        curl --location -X PUT "${THUNDER_URL}/applications/$app_id" \
-          --header 'Content-Type: application/json' \
-          --data "$APP_PAYLOAD" \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-
-        log_info "Application updated successfully"
-      else
-        log_info "Application does not exist, creating default application..."
-        curl --location "${THUNDER_URL}/applications" \
-          --header 'Content-Type: application/json' \
-          --data "$APP_PAYLOAD" \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-
-        log_info "OpenChoreo Observer Resource Reader application created successfully"
-      fi
-
-    60-finops-agent-client.sh: |
-      #!/bin/bash
-      set -e
-
-      THUNDER_URL="http://localhost:8090"
-
-      log_info "Checking if FinOps Agent application already exists..."
-      existing_apps=$(curl -s --max-time 10 "${THUNDER_URL}/applications")
-
-      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-
-      app_id=$(echo "$existing_apps" | tr '\n' ' ' | sed 's/" *: *"/":"/g' | grep -o '"clientId":"openchoreo-finops-agent"[^}]*"id":"[^"]*"\|"id":"[^"]*"[^}]*"clientId":"openchoreo-finops-agent"' | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-
-      APP_PAYLOAD='{
-        "name": "FinOps Agent",
-        "description": "OpenChoreo FinOps Agent Client",
-        "ouId": "__ORG_UNIT_ID__",
-        "type": "m2m",
-        "inboundAuthConfig": [
-          {
-            "type": "oauth2",
-            "config": {
-              "clientId": "openchoreo-finops-agent",
-              "clientSecret": "openchoreo-finops-agent-secret",
-              "grantTypes": [
-                "client_credentials"
-              ],
-              "tokenEndpointAuthMethod": "client_secret_post",
-              "pkceRequired": false,
-              "publicClient": false,
-              "token": {
-                "accessToken": {
-                  "clientConfig": {
-                    "validityPeriod": 3600
-                  }
-                }
-              }
-            }
-          }
-        ]
-      }'
-
-      APP_PAYLOAD="${APP_PAYLOAD//__ORG_UNIT_ID__/${ORG_UNIT_ID}}"
-
-      if [ -n "$app_id" ]; then
-        log_info "FinOps Agent application already exists (id: $app_id), updating..."
-        curl --location -X PUT "${THUNDER_URL}/applications/$app_id" \
-          --header 'Content-Type: application/json' \
-          --data "$APP_PAYLOAD" \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-
-        log_info "FinOps Agent application updated successfully"
-      else
-        log_info "FinOps Agent application does not exist, creating..."
-        curl --location "${THUNDER_URL}/applications" \
-          --header 'Content-Type: application/json' \
-          --data "$APP_PAYLOAD" \
-          --fail-with-body \
-          --max-time 30 \
-          --retry 3 \
-          --retry-delay 5
-
-        log_info "FinOps Agent application created successfully"
-      fi
-
-    61-mcp-e2e-subject-app.sh: |
-      #!/bin/bash
-      set -e
-
-      THUNDER_URL="http://localhost:8090"
-
-      log_info "Checking if application 'MCP E2E Subject' already exists..."
-      existing_apps=$(curl -s --max-time 10 "${THUNDER_URL}/applications")
-
-      ORG_UNIT_ID=$(curl -s --max-time 10 "${THUNDER_URL}/organization-units/tree/default" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-
-      app_id=$(echo "$existing_apps" | tr '\n' ' ' | sed 's/" *: *"/":"/g' | grep -o '"clientId":"mcp-e2e-subject-client"[^}]*"id":"[^"]*"\|"id":"[^"]*"[^}]*"clientId":"mcp-e2e-subject-client"' | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-
-      APP_PAYLOAD='{
-        "name": "MCP E2E Subject",
-        "description": "Permission-less client_credentials subject for MCP e2e authorization tests. Intentionally has NO ClusterAuthzRoleBinding.",
-        "ouId": "__ORG_UNIT_ID__",
-        "type": "m2m",
-        "inboundAuthConfig": [
-          {
-            "type": "oauth2",
-            "config": {
-              "clientId": "mcp-e2e-subject-client",
-              "clientSecret": "mcp-e2e-subject-secret",
-              "grantTypes": [
-                "client_credentials"
-              ],
-              "tokenEndpointAuthMethod": "client_secret_post",
-              "pkceRequired": false,
-              "publicClient": false,
-              "token": {
-                "accessToken": {
-                  "clientConfig": {
-                    "validityPeriod": 3600
-                  }
-                }
-              }
-            }
-          }
-        ]
-      }'
-
-      APP_PAYLOAD="${APP_PAYLOAD//__ORG_UNIT_ID__/${ORG_UNIT_ID}}"
-
-      if [ -n "$app_id" ]; then
-        log_info "Application 'MCP E2E Subject' already exists (id: $app_id), updating..."
-        curl --location -X PUT "${THUNDER_URL}/applications/$app_id" \
-          --header 'Content-Type: application/json' \
-          --data "$APP_PAYLOAD" \
-          --fail-with-body --max-time 30 --retry 3 --retry-delay 5
-        log_info "Application updated successfully"
-      else
-        log_info "Application 'MCP E2E Subject' does not exist, creating..."
-        curl --location "${THUNDER_URL}/applications" \
-          --header 'Content-Type: application/json' \
-          --data "$APP_PAYLOAD" \
-          --fail-with-body --max-time 30 --retry 3 --retry-delay 5
-        log_info "Application created successfully"
-      fi
+    70-openchoreo-usertype.yaml: |
+      resource_type: "user_type"
+      id: "019a0000-0000-7000-8000-000000000010"
+      category: "user"
+      name: "openchoreo-user"
+      ouHandle: "default"
+      allowSelfRegistration: true
+      systemAttributes:
+        display: "username"
+      schema:
+        username:
+          type: "string"
+          displayName: "Username"
+          required: true
+        password:
+          type: "string"
+          displayName: "Password"
+          required: true
+          credential: true
+        given_name:
+          type: "string"
+          displayName: "First Name"
+          required: true
+        family_name:
+          type: "string"
+          displayName: "Last Name"
+          required: true
+        email:
+          type: "string"
+          displayName: "Email"
+          required: true
+          unique: true
+    71-openchoreo-users.yaml: |
+      resource_type: "user"
+      id: "019a0000-0000-7000-8000-000000000030"
+      type: "openchoreo-user"
+      ouHandle: "default"
+      attributes:
+        username: "admin@openchoreo.dev"
+        sub: "admin@openchoreo.dev"
+        email: "admin@openchoreo.dev"
+        given_name: "Admin"
+        family_name: "User"
+      credentials:
+        password: "{{ .ADMIN_PASSWORD }}"
+      ---
+      resource_type: "user"
+      id: "019a0000-0000-7000-8000-000000000031"
+      type: "openchoreo-user"
+      ouHandle: "default"
+      attributes:
+        username: "developer@openchoreo.dev"
+        sub: "developer@openchoreo.dev"
+        email: "developer@openchoreo.dev"
+        given_name: "Developer"
+        family_name: "User"
+      credentials:
+        password: "Dev@123"
+      ---
+      resource_type: "user"
+      id: "019a0000-0000-7000-8000-000000000032"
+      type: "openchoreo-user"
+      ouHandle: "default"
+      attributes:
+        username: "platform-engineer@openchoreo.dev"
+        sub: "platform-engineer@openchoreo.dev"
+        email: "platform-engineer@openchoreo.dev"
+        given_name: "Platform"
+        family_name: "Engineer"
+      credentials:
+        password: "PE@123"
+      ---
+      resource_type: "user"
+      id: "019a0000-0000-7000-8000-000000000033"
+      type: "openchoreo-user"
+      ouHandle: "default"
+      attributes:
+        username: "sre@openchoreo.dev"
+        sub: "sre@openchoreo.dev"
+        email: "sre@openchoreo.dev"
+        given_name: "SRE"
+        family_name: "User"
+      credentials:
+        password: "SRE@123"
+    72-openchoreo-groups.yaml: |
+      resource_type: "group"
+      id: "019a0000-0000-7000-8000-000000000040"
+      name: "admins"
+      description: "Openchoreo Admins group"
+      ouHandle: "default"
+      members:
+        - id: "019a0000-0000-7000-8000-000000000030"
+          type: "user"
+      ---
+      resource_type: "group"
+      id: "019a0000-0000-7000-8000-000000000041"
+      name: "developers"
+      description: "Openchoreo Developers group"
+      ouHandle: "default"
+      members:
+        - id: "019a0000-0000-7000-8000-000000000031"
+          type: "user"
+      ---
+      resource_type: "group"
+      id: "019a0000-0000-7000-8000-000000000042"
+      name: "platform-engineers"
+      description: "Openchoreo Platform Engineers group"
+      ouHandle: "default"
+      members:
+        - id: "019a0000-0000-7000-8000-000000000032"
+          type: "user"
+      ---
+      resource_type: "group"
+      id: "019a0000-0000-7000-8000-000000000043"
+      name: "sres"
+      description: "Openchoreo SREs group"
+      ouHandle: "default"
+      members:
+        - id: "019a0000-0000-7000-8000-000000000033"
+          type: "user"
+    80-backstage-app.yaml: |
+      resource_type: "application"
+      id: "019a0000-0000-7000-8000-000000000060"
+      name: "Backstage"
+      description: "OpenChoreo Backstage Portal"
+      type: "custom"
+      ouId: "01900000-0000-7000-8000-000000000001"
+      logoUrl: "https://cdn.statically.io/gh/openchoreo/openchoreo.github.io@main/static/img/openchoreo-logo.png"
+      allowedUserTypes:
+        - "openchoreo-user"
+      authFlowId: "01900000-0000-7000-8000-000000000061"
+      inboundAuthConfig:
+        - type: "oauth2"
+          config:
+            clientId: "openchoreo-backstage-client"
+            clientSecret: "{{ .BACKSTAGE_CLIENT_SECRET }}"
+            redirectUris:
+              - "https://console.platform.rpcu.lan/api/auth/openchoreo-auth/handler/frame"
+            grantTypes:
+              - "authorization_code"
+              - "client_credentials"
+              - "refresh_token"
+            responseTypes:
+              - "code"
+            tokenEndpointAuthMethod: "client_secret_post"
+            pkceRequired: false
+            publicClient: false
+            token:
+              accessToken:
+                userConfig:
+                  validityPeriod: 86400
+                  attributes:
+                    - "given_name"
+                    - "family_name"
+                    - "username"
+                    - "groups"
+              idToken:
+                validityPeriod: 86400
+                userAttributes:
+                  - "given_name"
+                  - "family_name"
+                  - "username"
+                  - "groups"
+            scopeClaims:
+              email:
+                - "email"
+              groups:
+                - "groups"
+              profile:
+                - "username"
+                - "given_name"
+                - "family_name"
+                - "picture"
+    81-customer-portal-app.yaml: |
+      resource_type: "application"
+      id: "019a0000-0000-7000-8000-000000000061"
+      name: "Customer Portal"
+      description: "Customer Portal Application"
+      type: "m2m"
+      ouId: "01900000-0000-7000-8000-000000000001"
+      inboundAuthConfig:
+        - type: "oauth2"
+          config:
+            clientId: "customer-portal-client"
+            clientSecret: "supersecret"
+            grantTypes:
+              - "client_credentials"
+            tokenEndpointAuthMethod: "client_secret_post"
+            pkceRequired: false
+            publicClient: false
+            token:
+              accessToken:
+                clientConfig:
+                  validityPeriod: 3600
+    82-rca-agent-app.yaml: |
+      resource_type: "application"
+      id: "019a0000-0000-7000-8000-000000000062"
+      name: "RCA Agent"
+      description: "OpenChoreo RCA Agent Client"
+      type: "m2m"
+      ouId: "01900000-0000-7000-8000-000000000001"
+      inboundAuthConfig:
+        - type: "oauth2"
+          config:
+            clientId: "openchoreo-rca-agent"
+            clientSecret: "openchoreo-rca-agent-secret"
+            grantTypes:
+              - "client_credentials"
+            tokenEndpointAuthMethod: "client_secret_post"
+            pkceRequired: false
+            publicClient: false
+            token:
+              accessToken:
+                clientConfig:
+                  validityPeriod: 3600
+    83-cli-app.yaml: |
+      resource_type: "application"
+      id: "019a0000-0000-7000-8000-000000000063"
+      name: "OpenChoreo CLI"
+      description: "OpenChoreo CLI Default Application"
+      type: "custom"
+      ouId: "01900000-0000-7000-8000-000000000001"
+      logoUrl: "https://cdn.statically.io/gh/openchoreo/openchoreo.github.io@main/static/img/openchoreo-logo.png"
+      allowedUserTypes:
+        - "openchoreo-user"
+      authFlowId: "01900000-0000-7000-8000-000000000061"
+      inboundAuthConfig:
+        - type: "oauth2"
+          config:
+            clientId: "openchoreo-cli"
+            redirectUris:
+              - "http://127.0.0.1:55152/auth-callback"
+            grantTypes:
+              - "authorization_code"
+              - "refresh_token"
+            responseTypes:
+              - "code"
+            tokenEndpointAuthMethod: "none"
+            pkceRequired: true
+            publicClient: true
+            token:
+              accessToken:
+                userConfig:
+                  validityPeriod: 3600
+                  attributes:
+                    - "given_name"
+                    - "family_name"
+                    - "username"
+                    - "groups"
+              idToken:
+                validityPeriod: 3600
+                userAttributes:
+                  - "given_name"
+                  - "family_name"
+                  - "username"
+                  - "groups"
+            scopeClaims:
+              email:
+                - "email"
+              groups:
+                - "groups"
+              profile:
+                - "username"
+                - "given_name"
+                - "family_name"
+                - "picture"
+                - "groups"
+    84-system-app.yaml: |
+      resource_type: "application"
+      id: "019a0000-0000-7000-8000-000000000064"
+      name: "System Application"
+      description: "Generic system application for automation and integrations"
+      type: "m2m"
+      ouId: "01900000-0000-7000-8000-000000000001"
+      inboundAuthConfig:
+        - type: "oauth2"
+          config:
+            clientId: "openchoreo-system-app"
+            clientSecret: "openchoreo-system-app-secret"
+            grantTypes:
+              - "client_credentials"
+            tokenEndpointAuthMethod: "client_secret_post"
+            pkceRequired: false
+            publicClient: false
+            token:
+              accessToken:
+                clientConfig:
+                  validityPeriod: 3600
+    85-user-mcp-app.yaml: |
+      resource_type: "application"
+      id: "019a0000-0000-7000-8000-000000000065"
+      name: "User MCP App"
+      description: "User MCP app to be used by terminals and user facing AI agents"
+      type: "mcp"
+      ouId: "01900000-0000-7000-8000-000000000001"
+      allowedUserTypes:
+        - "openchoreo-user"
+      authFlowId: "01900000-0000-7000-8000-000000000061"
+      inboundAuthConfig:
+        - type: "oauth2"
+          config:
+            clientId: "user_mcp_client"
+            redirectUris:
+              - "http://localhost:8075/callback"
+              - "cursor://anysphere.cursor-mcp/oauth/callback"
+              - "http://127.0.0.1:19876/mcp/oauth/callback"
+            grantTypes:
+              - "authorization_code"
+              - "refresh_token"
+            responseTypes:
+              - "code"
+            tokenEndpointAuthMethod: "none"
+            pkceRequired: true
+            publicClient: true
+            token:
+              accessToken:
+                userConfig:
+                  validityPeriod: 86400
+                  attributes:
+                    - "given_name"
+                    - "family_name"
+                    - "username"
+                    - "groups"
+              idToken:
+                validityPeriod: 86400
+                userAttributes:
+                  - "given_name"
+                  - "family_name"
+                  - "username"
+                  - "groups"
+    86-service-mcp-app.yaml: |
+      resource_type: "application"
+      id: "019a0000-0000-7000-8000-000000000066"
+      name: "Service MCP App"
+      description: "Service MCP app to be used by backend services which can securely store the secret"
+      type: "m2m"
+      ouId: "01900000-0000-7000-8000-000000000001"
+      inboundAuthConfig:
+        - type: "oauth2"
+          config:
+            clientId: "service_mcp_client"
+            clientSecret: "service_mcp_client_secret"
+            grantTypes:
+              - "client_credentials"
+            tokenEndpointAuthMethod: "client_secret_basic"
+            token:
+              accessToken:
+                clientConfig:
+                  validityPeriod: 86400
+    87-workload-publisher-app.yaml: |
+      resource_type: "application"
+      id: "019a0000-0000-7000-8000-000000000067"
+      name: "Workload Publisher"
+      description: "OpenChoreo Workload Publisher Client for creating workloads from CI workflows"
+      type: "m2m"
+      ouId: "01900000-0000-7000-8000-000000000001"
+      inboundAuthConfig:
+        - type: "oauth2"
+          config:
+            clientId: "openchoreo-workload-publisher-client"
+            clientSecret: "openchoreo-workload-publisher-secret"
+            grantTypes:
+              - "client_credentials"
+            tokenEndpointAuthMethod: "client_secret_post"
+            pkceRequired: false
+            publicClient: false
+            token:
+              accessToken:
+                clientConfig:
+                  validityPeriod: 3600
+    88-observer-app.yaml: |
+      resource_type: "application"
+      id: "019a0000-0000-7000-8000-000000000068"
+      name: "OpenChoreo Observer Resource Reader"
+      description: "OpenChoreo Observer Resource Reader Client"
+      type: "m2m"
+      ouId: "01900000-0000-7000-8000-000000000001"
+      inboundAuthConfig:
+        - type: "oauth2"
+          config:
+            clientId: "openchoreo-observer-resource-reader-client"
+            clientSecret: "openchoreo-observer-resource-reader-client-secret"
+            grantTypes:
+              - "client_credentials"
+            tokenEndpointAuthMethod: "client_secret_post"
+            pkceRequired: false
+            publicClient: false
+            token:
+              accessToken:
+                clientConfig:
+                  validityPeriod: 3600
+    89-finops-agent-app.yaml: |
+      resource_type: "application"
+      id: "019a0000-0000-7000-8000-000000000069"
+      name: "FinOps Agent"
+      description: "OpenChoreo FinOps Agent Client"
+      type: "m2m"
+      ouId: "01900000-0000-7000-8000-000000000001"
+      inboundAuthConfig:
+        - type: "oauth2"
+          config:
+            clientId: "openchoreo-finops-agent"
+            clientSecret: "openchoreo-finops-agent-secret"
+            grantTypes:
+              - "client_credentials"
+            tokenEndpointAuthMethod: "client_secret_post"
+            pkceRequired: false
+            publicClient: false
+            token:
+              accessToken:
+                clientConfig:
+                  validityPeriod: 3600
+    90-mcp-e2e-subject-app.yaml: |
+      resource_type: "application"
+      id: "019a0000-0000-7000-8000-00000000006a"
+      name: "MCP E2E Subject"
+      description: "Permission-less client_credentials subject for MCP e2e authorization tests. Intentionally has NO ClusterAuthzRoleBinding."
+      type: "m2m"
+      ouId: "01900000-0000-7000-8000-000000000001"
+      inboundAuthConfig:
+        - type: "oauth2"
+          config:
+            clientId: "mcp-e2e-subject-client"
+            clientSecret: "mcp-e2e-subject-secret"
+            grantTypes:
+              - "client_credentials"
+            tokenEndpointAuthMethod: "client_secret_post"
+            pkceRequired: false
+            publicClient: false
+            token:
+              accessToken:
+                clientConfig:
+                  validityPeriod: 3600
