@@ -13,5 +13,4 @@ spec:
     namespace: flux-system
   path: ./infrastructure/thunderid
   prune: true
-  wait: true
   timeout: 10m
