@@ -10,5 +10,5 @@ metadata:
 spec:
   dataPlaneRef:
     kind: DataPlane
-    name: dev
+    name: test
   isProduction: false
