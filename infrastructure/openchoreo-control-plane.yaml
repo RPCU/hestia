@@ -32,6 +32,15 @@ spec:
   values:
     kubernetesClusterDomain: platform.local
     openchoreoApi:
+      clusterGateway:
+        # Short in-cluster Service name (resolves via the search domain). The chart
+        # default ...svc.cluster.local doesn't resolve here (cluster domain is
+        # platform.local). The internal API (:8444) is in-cluster only and its vault
+        # cert has no matching internal SAN, so skip server verification for this
+        # hop; client mTLS still authenticates us to the gateway.
+        url: "https://cluster-gateway.openchoreo-control-plane.svc:8444"
+        tls:
+          insecure: true
       config:
         server:
           publicUrl: "https://api.platform.rpcu.lan"
@@ -47,6 +56,10 @@ spec:
         issuerRef:
           kind: ClusterIssuer
           name: vault-issuer
+        # vault-issuer (pki-int/cm-platform) only signs *.platform.rpcu.lan, so the
+        # gateway server cert carries just the external agent-facing SAN. The
+        # in-cluster control-plane clients therefore can't hostname-verify it and
+        # use tls.insecure (in-cluster hop only, mTLS client-auth still enforced).
         dnsNames:
           - "cluster-gateway.platform.rpcu.lan"
       tlsRoute:
@@ -55,7 +68,13 @@ spec:
           - host: cluster-gateway.platform.rpcu.lan
     controllerManager:
       clusterGateway:
+        # Short in-cluster Service name (resolves via the search domain). The
+        # internal API (:8444) is in-cluster only and its vault cert has no matching
+        # internal SAN, so skip server verification for this hop; client mTLS still
+        # authenticates us.
         url: "https://cluster-gateway.openchoreo-control-plane.svc:8444"
+        tls:
+          insecure: true
     backstage:
       secretName: backstage
       database:
