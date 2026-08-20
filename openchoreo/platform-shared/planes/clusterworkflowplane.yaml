@@ -1,0 +1,17 @@
+apiVersion: openchoreo.dev/v1alpha1
+kind: ClusterWorkflowPlane
+metadata:
+  # "default" matches the built-in ClusterWorkflowPlaneRef default so Workflows
+  # resolve to it without an explicit workflowPlaneRef. planeID is the physical
+  # plane id and must match clusterAgent.planeID in the workflow-plane HelmRelease.
+  name: default
+spec:
+  planeID: workflow
+  clusterAgent:
+    clientCA:
+      secretKeyRef:
+        name: cluster-agent-tls
+        namespace: openchoreo-workflow-plane
+        key: ca.crt
+  secretStoreRef:
+    name: vault-backend

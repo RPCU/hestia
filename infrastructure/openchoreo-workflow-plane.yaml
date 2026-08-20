@@ -1,0 +1,44 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: openchoreo-workflow-plane
+  namespace: flux-system
+spec:
+  interval: 5m
+  targetNamespace: openchoreo-workflow-plane
+  # The gateway (and its agent-facing cluster-gateway on :8443) must exist first.
+  dependsOn:
+    - name: openchoreo-control-plane
+  chart:
+    spec:
+      chart: openchoreo-workflow-plane
+      version: "1.2.2"
+      sourceRef:
+        # Reuses the OCI HelmRepository declared in openchoreo-control-plane.yaml.
+        kind: HelmRepository
+        name: openchoreo
+        namespace: flux-system
+  install:
+    createNamespace: true
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    clusterAgent:
+      enabled: true
+      # Distinct physical plane (co-located in the control-plane cluster) vs the
+      # data plane's "dev" on the test cluster. Must match the planeID in the
+      # ClusterWorkflowPlane registration CR.
+      planeID: workflow
+      # The cluster-gateway server cert is vault-issued with SAN
+      # cluster-gateway.platform.rpcu.lan only (no internal .svc SAN), so the
+      # agent connects via the external hostname and verifies it against the
+      # internal CA bundle (rpcu-ca-trust, replicated into every namespace).
+      serverUrl: "wss://cluster-gateway.platform.rpcu.lan/ws"
+      tls:
+        enabled: true
+        # Agent generates its own self-signed CA (cluster-agent-tls) — its ca.crt
+        # goes into the ClusterWorkflowPlane registration's clusterAgent.clientCA.
+        generateCerts: true
+        serverCAConfigMap: rpcu-ca-trust
+        caSecretName: ""

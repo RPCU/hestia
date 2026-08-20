@@ -4,4 +4,5 @@ resources:
   - openchoreo-requirements.yaml
   - thunderid.yaml
   - openchoreo-control-plane.yaml
+  - openchoreo-workflow-plane.yaml
   - openchoreo-resources.yaml
