@@ -32,7 +32,12 @@ spec:
       initContainers:
         - name: copy-occ
           image: "{{inputs.parameters.openchoreo-cli-image}}"
-          command: [sh, -c, "mkdir -p /tools/bin && cp /usr/local/bin/occ /tools/bin/occ"]
+          command:
+            [
+              sh,
+              -c,
+              "mkdir -p /tools/bin && cp /usr/local/bin/occ /tools/bin/occ",
+            ]
           securityContext:
             runAsUser: 1000
             runAsGroup: 1000
@@ -44,27 +49,34 @@ spec:
         image: ghcr.io/openchoreo/podman-runner:v1.2
         env:
           - name: IMAGE
-            value: '{{inputs.parameters.image}}'
+            value: "{{inputs.parameters.image}}"
           - name: RUN_NAME
-            value: '{{inputs.parameters.run-name}}'
+            value: "{{inputs.parameters.run-name}}"
           - name: PROJECT_NAME
-            value: '{{workflow.parameters.project-name}}'
+            value: "{{workflow.parameters.project-name}}"
           - name: COMPONENT_NAME
-            value: '{{workflow.parameters.component-name}}'
+            value: "{{workflow.parameters.component-name}}"
           - name: NAMESPACE_NAME
-            value: '{{workflow.parameters.namespace-name}}'
+            value: "{{workflow.parameters.namespace-name}}"
           - name: APP_PATH
-            value: '{{workflow.parameters.app-path}}'
+            value: "{{workflow.parameters.app-path}}"
           - name: OAUTH_URL
-            value: '{{inputs.parameters.oauth-token-url}}'
+            value: "{{inputs.parameters.oauth-token-url}}"
           - name: CLIENT_ID
-            value: '{{inputs.parameters.oauth-client-id}}'
+            value: "{{inputs.parameters.oauth-client-id}}"
+          # RPCU: read the client secret from the Vault-backed k8s Secret
+          # (ExternalSecret workload-publisher-oidc) instead of the plaintext
+          # oauth-client-secret parameter default. The Secret lives in the build
+          # namespace (workflows-<org-ns>) where this pod runs.
           - name: CLIENT_SECRET
-            value: '{{inputs.parameters.oauth-client-secret}}'
+            valueFrom:
+              secretKeyRef:
+                name: workload-publisher-oidc
+                key: client-secret
           - name: OAUTH_SCOPE
-            value: '{{inputs.parameters.oauth-scope}}'
+            value: "{{inputs.parameters.oauth-scope}}"
           - name: API_URL
-            value: '{{inputs.parameters.api-server-url}}'
+            value: "{{inputs.parameters.api-server-url}}"
         command:
           - sh
           - -c
