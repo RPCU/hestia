@@ -270,6 +270,7 @@ bootstrap:
           type: "TASK_EXECUTION"
           properties:
             idpId: "019a0000-0000-7000-8000-000000000020"
+            allowAuthenticationWithoutLocalUser: true
           executor:
             name: "OIDCAuthExecutor"
             inputs:
@@ -283,6 +284,28 @@ bootstrap:
           executor:
             name: "ProvisioningExecutor"
           onSuccess: "authorization"
+          onIncomplete: "prompt_schema_attrs"
+        - id: "prompt_schema_attrs"
+          type: "PROMPT"
+          meta:
+            components:
+              - type: "BLOCK"
+                id: "block_dynamic_user_inputs"
+                resourceType: "ELEMENT"
+                components:
+                  - type: "DYNAMIC_INPUT_PLACEHOLDER"
+                    id: "dynamic_inputs"
+                  - type: "ACTION"
+                    id: "action_schema_attrs"
+                    label: "Continue"
+                    variant: "PRIMARY"
+                    eventType: "SUBMIT"
+                    resourceType: "ELEMENT"
+          prompts:
+            - inputs: []
+              action:
+                ref: "action_schema_attrs"
+                nextNode: "provisioning"
         - id: "authorization"
           type: "TASK_EXECUTION"
           executor:
