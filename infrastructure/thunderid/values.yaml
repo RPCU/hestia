@@ -316,7 +316,7 @@ bootstrap:
           type: "END"
     80-backstage-app.yaml: |
       resource_type: "application"
-      id: "019a0000-0000-7000-8000-000000000060"
+      id: "openchoreo-backstage-client"
       name: "Backstage"
       description: "OpenChoreo Backstage Portal"
       type: "custom"
