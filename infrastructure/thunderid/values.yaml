@@ -65,6 +65,10 @@ configuration:
   passkey:
     allowedOrigins:
       - "https://console.platform.rpcu.lan"
+  # Temporary: verbose logging to capture the exact federated `groups` claim value
+  # the OIDC executor stores in runtime data (needed to pin the flow condition).
+  log:
+    level: debug
 setup:
   enabled: true
   # Strong ThunderID Console admin password (username defaults to "admin") from Vault/ESO.
@@ -239,6 +243,7 @@ bootstrap:
         - "openid"
         - "email"
         - "profile"
+        - "urn:zitadel:iam:org:project:roles"
       attributeConfiguration:
         userTypeResolution:
           default: "openchoreo-user"
@@ -278,34 +283,25 @@ bootstrap:
                 identifier: "code"
                 type: "TEXT_INPUT"
                 required: true
-          onSuccess: "provisioning"
-        - id: "provisioning"
+          onSuccess: "provision_admin"
+        - id: "provision_admin"
           type: "TASK_EXECUTION"
+          condition:
+            key: "{{ctx(groups)}}"
+            value: "rpcu-admin"
+            onSkip: "provision_dev"
+          properties:
+            assignGroup: "019a0000-0000-7000-8000-000000000040"
           executor:
             name: "ProvisioningExecutor"
           onSuccess: "authorization"
-          onIncomplete: "prompt_schema_attrs"
-        - id: "prompt_schema_attrs"
-          type: "PROMPT"
-          meta:
-            components:
-              - type: "BLOCK"
-                id: "block_dynamic_user_inputs"
-                resourceType: "ELEMENT"
-                components:
-                  - type: "DYNAMIC_INPUT_PLACEHOLDER"
-                    id: "dynamic_inputs"
-                  - type: "ACTION"
-                    id: "action_schema_attrs"
-                    label: "Continue"
-                    variant: "PRIMARY"
-                    eventType: "SUBMIT"
-                    resourceType: "ELEMENT"
-          prompts:
-            - inputs: []
-              action:
-                ref: "action_schema_attrs"
-                nextNode: "provisioning"
+        - id: "provision_dev"
+          type: "TASK_EXECUTION"
+          properties:
+            assignGroup: "019a0000-0000-7000-8000-000000000041"
+          executor:
+            name: "ProvisioningExecutor"
+          onSuccess: "authorization"
         - id: "authorization"
           type: "TASK_EXECUTION"
           executor:
