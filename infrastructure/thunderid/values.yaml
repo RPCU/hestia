@@ -552,7 +552,7 @@ bootstrap:
                   validityPeriod: 86400
     87-workload-publisher-app.yaml: |
       resource_type: "application"
-      id: "019a0000-0000-7000-8000-000000000067"
+      id: "openchoreo-workload-publisher-client"
       name: "Workload Publisher"
       description: "OpenChoreo Workload Publisher Client for creating workloads from CI workflows"
       type: "m2m"
