@@ -13,3 +13,36 @@ spec:
   type:
     kind: ClusterProjectType
     name: standard
+---
+apiVersion: openchoreo.dev/v1alpha1
+kind: ProjectReleaseBinding
+metadata:
+  labels:
+    openchoreo.dev/name: testing-development
+  name: testing-development
+spec:
+  owner:
+    projectName: testing
+  environment: development
+---
+apiVersion: openchoreo.dev/v1alpha1
+kind: ProjectReleaseBinding
+metadata:
+  labels:
+    openchoreo.dev/name: testing-staging
+  name: testing-staging
+spec:
+  owner:
+    projectName: testing
+  environment: staging
+---
+apiVersion: openchoreo.dev/v1alpha1
+kind: ProjectReleaseBinding
+metadata:
+  labels:
+    openchoreo.dev/name: testing-production
+  name: testing-production
+spec:
+  owner:
+    projectName: testing
+  environment: production
