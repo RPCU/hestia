@@ -4,16 +4,12 @@ metadata:
   name: web-application
 spec:
   workloadType: deployment
-
-
   allowedTraits:
     - name: api-configuration
     - name: observability-alert-rule
-
   validations:
     - rule: "${workload.endpoints.exists(name, endpoint, endpoint.type == 'HTTP')}"
       message: "Web-application components must have at least one HTTP."
-
   environmentConfigs:
     openAPIV3Schema:
       type: object
@@ -46,7 +42,6 @@ spec:
         imagePullPolicy:
           type: string
           default: IfNotPresent
-
   resources:
     - id: deployment
       template:
@@ -83,7 +78,6 @@ spec:
                   envFrom: ${configurations.toContainerEnvFrom()}
                   volumeMounts: ${configurations.toContainerVolumeMounts()}
               volumes: ${configurations.toVolumes()}
-
     - id: service
       includeWhen: ${size(workload.endpoints) > 0}
       template:
@@ -97,7 +91,6 @@ spec:
           type: ClusterIP
           selector: ${metadata.podSelectors}
           ports: ${workload.toServicePorts()}
-
     - id: httproute-external
       forEach: '${workload.endpoints.transformList(name, ep, ("external" in ep.visibility && ep.type in ["HTTP", "REST", "GraphQL", "Websocket"]) ? [name] : []).flatten()}'
       var: endpoint

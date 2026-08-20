@@ -4,16 +4,21 @@ metadata:
   name: service
 spec:
   workloadType: deployment
-
-
+  allowedWorkflows:
+    - kind: ClusterWorkflow
+      name: dockerfile-builder
+    - kind: ClusterWorkflow
+      name: gcp-buildpacks-builder
+    - kind: ClusterWorkflow
+      name: paketo-buildpacks-builder
+    - kind: ClusterWorkflow
+      name: ballerina-buildpack-builder
   allowedTraits:
     - name: api-configuration
     - name: observability-alert-rule
-
   validations:
     - rule: "${size(workload.endpoints) > 0}"
       message: "Service components must have at least one endpoint. Use 'deployment/worker' for components without endpoints."
-
   environmentConfigs:
     openAPIV3Schema:
       type: object
@@ -46,7 +51,6 @@ spec:
         imagePullPolicy:
           type: string
           default: IfNotPresent
-
   resources:
     - id: deployment
       template:
@@ -83,7 +87,6 @@ spec:
                   envFrom: ${configurations.toContainerEnvFrom()}
                   volumeMounts: ${configurations.toContainerVolumeMounts()}
               volumes: ${configurations.toVolumes()}
-
     - id: service
       includeWhen: ${size(workload.endpoints) > 0}
       template:
