@@ -22,12 +22,12 @@ spec:
           type: object
           additionalProperties:
             type: string
-          standard: {}
+          default: {}
         namespaceAnnotations:
           type: object
           additionalProperties:
             type: string
-          standard: {}
+          default: {}
   resources:
     - id: cell-namespace
       template:
