@@ -35,5 +35,8 @@ spec:
         kind: Namespace
         metadata:
           name: ${metadata.namespace}
-          labels: ${oc_merge(metadata.labels, environmentConfigs.namespaceLabels)}
-          annotations: ${environmentConfigs.namespaceAnnotations}
+          # environmentConfigs is the raw ProjectReleaseBinding value; OpenChoreo
+          # does NOT inject the openAPIV3Schema defaults into the CEL context, so
+          # guard the optional keys with has() to avoid "no such key" render errors.
+          labels: "${oc_merge(metadata.labels, has(environmentConfigs.namespaceLabels) ? environmentConfigs.namespaceLabels : {})}"
+          annotations: "${has(environmentConfigs.namespaceAnnotations) ? environmentConfigs.namespaceAnnotations : {}}"
