@@ -367,6 +367,7 @@ bootstrap:
                 - "given_name"
                 - "family_name"
                 - "picture"
+                - "groups"
     81-customer-portal-app.yaml: |
       resource_type: "application"
       id: "019a0000-0000-7000-8000-000000000061"
