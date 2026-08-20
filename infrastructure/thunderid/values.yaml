@@ -90,6 +90,12 @@ setup:
     - name: ZITADEL_CLIENT_SECRET
       secretName: thunderid-bootstrap
       secretKey: zitadel-client-secret
+    # Strong Workload Publisher client secret (used by the native workflow-plane
+    # generate-workload step to authenticate to the OpenChoreo API). Referenced
+    # in the shipped 87-workload-publisher-app resource as {{ .WORKFLOWS_CLIENT_SECRET }}.
+    - name: WORKFLOWS_CLIENT_SECRET
+      secretName: thunderid-bootstrap
+      secretKey: workflows-client-secret
 # Custom declarative bootstrap resources (Pattern 1) — mounted ALONGSIDE the
 # chart's shipped defaults (default OU, Person user_type, admin user, flows,
 # Console app, themes). Applied by the in-process `thunderid bootstrap` importer.
@@ -555,7 +561,7 @@ bootstrap:
         - type: "oauth2"
           config:
             clientId: "openchoreo-workload-publisher-client"
-            clientSecret: "openchoreo-workload-publisher-secret"
+            clientSecret: "{{ .WORKFLOWS_CLIENT_SECRET }}"
             grantTypes:
               - "client_credentials"
             tokenEndpointAuthMethod: "client_secret_post"

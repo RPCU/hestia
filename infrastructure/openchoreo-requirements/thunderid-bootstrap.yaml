@@ -28,3 +28,7 @@ spec:
       remoteRef:
         key: thunderid
         property: zitadel-client-secret
+    - secretKey: workflows-client-secret
+      remoteRef:
+        key: thunderid
+        property: workflows-client-secret
