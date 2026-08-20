@@ -231,7 +231,7 @@ bootstrap:
       name: "zitadel"
       description: "RPCU Zitadel OIDC identity provider"
       type: "oidc"
-      clientId: "386690213738473333"
+      clientId: "387085074090190709"
       clientSecret: "{{ .ZITADEL_CLIENT_SECRET }}"
       redirectUri: "https://thunderid.platform.rpcu.lan/gate/callback"
       authorizationEndpoint: "https://rpcu-gabeck.eu1.zitadel.cloud/oauth/v2/authorize"
