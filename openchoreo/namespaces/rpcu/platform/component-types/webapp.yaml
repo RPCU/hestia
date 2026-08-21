@@ -4,6 +4,15 @@ metadata:
   name: web-application
 spec:
   workloadType: deployment
+  allowedWorkflows:
+    - kind: ClusterWorkflow
+      name: dockerfile-builder
+    - kind: ClusterWorkflow
+      name: gcp-buildpacks-builder
+    - kind: ClusterWorkflow
+      name: paketo-buildpacks-builder
+    - kind: ClusterWorkflow
+      name: ballerina-buildpack-builder
   allowedTraits:
     - name: api-configuration
     - name: observability-alert-rule
