@@ -429,8 +429,6 @@ spec:
             value: "{{workflow.parameters.docker-context}}"
           - name: DOCKERFILE_PATH
             value: "{{workflow.parameters.dockerfile-path}}"
-          - name: GIT_REPO
-            value: "{{workflow.parameters.git-repo}}"
           - name: BUILD_ENV_JSON
             value: "{{inputs.parameters.build-env}}"
           - name: BUILD_ARGS_JSON
@@ -510,14 +508,7 @@ spec:
             fi
 
             echo ">> Building image"
-            # Label the image with its source repo so GHCR links the package to the
-            # GitHub repository (a "repository package"). Linked packages inherit the
-            # repo's permissions, so the rpcu-bot App's Repository Packages:RW can
-            # create/push it — instead of hitting "not allowed to Create organization
-            # package" (which is what an unlinked org-level package requires).
-            podman build -t "$IMAGE" \
-              --label "org.opencontainers.image.source=${GIT_REPO%.git}" \
-              -f "$WORKDIR/$DOCKERFILE_PATH" "$@" -- "$WORKDIR/$DOCKER_CONTEXT"
+            podman build -t "$IMAGE" -f "$WORKDIR/$DOCKERFILE_PATH" "$@" -- "$WORKDIR/$DOCKER_CONTEXT"
             echo ">> Image built successfully"
             podman save -o /mnt/vol/app-image.tar "$IMAGE"
         securityContext:

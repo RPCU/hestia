@@ -31,8 +31,6 @@ spec:
             value: "{{workflow.parameters.image-name}}"
           - name: IMAGE_TAG
             value: "{{workflow.parameters.image-tag}}"
-          - name: GIT_REPO
-            value: "{{workflow.parameters.git-repo}}"
         command:
           - sh
           - -c
@@ -42,16 +40,15 @@ spec:
 
             SRC_IMAGE="${IMAGE_NAME}:${IMAGE_TAG}-${GIT_REVISION}"
 
-            # RPCU: push built images to GitHub Container Registry under the org,
-            # structured as ghcr.io/rpcu/<repo>/<image-name>:<tag>-<revision>, where
-            # <repo> is derived from the GitHub repository URL and <image-name> is
-            # set per-component (imageName parameter, defaults to the component name).
-            # Auth comes from the registry-push-secret dockerconfigjson (a GitHub
-            # PAT with write:packages), materialised in the build namespace by the
-            # dockerfile-builder ClusterWorkflow from Vault key `registry-push-secret`.
-            REGISTRY_ENDPOINT="ghcr.io/rpcu"
-            REPO_NAME=$(basename "${GIT_REPO%/}" .git)
-            TARGET_IMAGE="${REGISTRY_ENDPOINT}/${REPO_NAME}/${SRC_IMAGE}"
+            # RPCU: push built images to the self-hosted zot registry under a fixed
+            # `public` namespace: zot.rpcu.io/public/<image-name>:<tag>-<revision>.
+            # <image-name> is set per-component (imageName parameter, defaults to the
+            # component name). Auth comes from the registry-push-secret dockerconfigjson
+            # (a zot htpasswd user) from Vault key `registry-push-secret`. zot creates
+            # repos on push; the `public` path allows anonymous pull, so there are no
+            # per-package rights and no data-plane pull secret.
+            REGISTRY_ENDPOINT="zot.rpcu.io/public"
+            TARGET_IMAGE="${REGISTRY_ENDPOINT}/${SRC_IMAGE}"
             AUTH_FILE="/etc/secrets/registry-push-secret/.dockerconfigjson"
 
             echo ">> Source image: $SRC_IMAGE"
