@@ -1,0 +1,75 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: github-app-key
+  namespace: openchoreo-control-plane
+spec:
+  refreshInterval: "1h"
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: github-app-key
+  data:
+    - secretKey: privateKey
+      remoteRef:
+        key: github-app
+        property: private-key
+---
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: GithubAccessToken
+metadata:
+  name: ghcr-push-token
+  namespace: openchoreo-control-plane
+spec:
+  appID: "3164565"
+  installID: "118418090"
+  permissions:
+    packages: write
+  auth:
+    privateKey:
+      secretRef:
+        name: github-app-key
+        key: privateKey
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: ghcr-dockercfg
+  namespace: openchoreo-control-plane
+spec:
+  refreshInterval: "30m"
+  target:
+    name: ghcr-dockercfg
+    template:
+      engineVersion: v2
+      type: kubernetes.io/dockerconfigjson
+      data:
+        .dockerconfigjson: |
+          {"auths":{"ghcr.io":{"auth":"{{ printf "x-access-token:%s" .token | b64enc }}"}}}
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: GithubAccessToken
+          name: ghcr-push-token
+---
+apiVersion: external-secrets.io/v1alpha1
+kind: PushSecret
+metadata:
+  name: ghcr-dockercfg-to-vault
+  namespace: openchoreo-control-plane
+spec:
+  refreshInterval: "30m"
+  secretStoreRefs:
+    - name: vault-backend
+      kind: ClusterSecretStore
+  selector:
+    secret:
+      name: ghcr-dockercfg
+  data:
+    - match:
+        secretKey: .dockerconfigjson
+        remoteRef:
+          remoteKey: registry-push-secret
+          property: value

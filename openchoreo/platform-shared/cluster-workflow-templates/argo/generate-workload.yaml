@@ -64,14 +64,14 @@ spec:
             value: "{{inputs.parameters.oauth-token-url}}"
           - name: CLIENT_ID
             value: "{{inputs.parameters.oauth-client-id}}"
-          # RPCU: read the client secret from the Vault-backed k8s Secret
-          # (ExternalSecret workload-publisher-oidc) instead of the plaintext
-          # oauth-client-secret parameter default. The Secret lives in the build
-          # namespace (workflows-<org-ns>) where this pod runs.
+          # RPCU: read the client secret from a per-run Vault-backed Secret that
+          # each builder materialises in the build namespace (resources id
+          # workload-publisher-secret), named after the WorkflowRun. This avoids a
+          # standing per-tenant secret / pre-creating each workflows-<org> namespace.
           - name: CLIENT_SECRET
             valueFrom:
               secretKeyRef:
-                name: workload-publisher-oidc
+                name: "{{workflow.parameters.workload-publisher-secret}}"
                 key: client-secret
           - name: OAUTH_SCOPE
             value: "{{inputs.parameters.oauth-scope}}"

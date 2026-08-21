@@ -18,7 +18,7 @@ spec:
         - name: registry-push-secret
           secret:
             optional: true
-            secretName: '{{workflow.parameters.registry-push-secret}}'
+            secretName: "{{workflow.parameters.registry-push-secret}}"
         - name: storage
           emptyDir:
             sizeLimit: 10Gi
@@ -26,11 +26,13 @@ spec:
         image: ghcr.io/openchoreo/podman-runner:v1.2
         env:
           - name: GIT_REVISION
-            value: '{{inputs.parameters.git-revision}}'
+            value: "{{inputs.parameters.git-revision}}"
           - name: IMAGE_NAME
-            value: '{{workflow.parameters.image-name}}'
+            value: "{{workflow.parameters.image-name}}"
           - name: IMAGE_TAG
-            value: '{{workflow.parameters.image-tag}}'
+            value: "{{workflow.parameters.image-tag}}"
+          - name: GIT_REPO
+            value: "{{workflow.parameters.git-repo}}"
         command:
           - sh
           - -c
@@ -40,11 +42,20 @@ spec:
 
             SRC_IMAGE="${IMAGE_NAME}:${IMAGE_TAG}-${GIT_REVISION}"
 
-            REGISTRY_ENDPOINT="ttl.sh/openchoreo-builds"
+            # RPCU: push built images to GitHub Container Registry under the org,
+            # structured as ghcr.io/rpcu/<repo>/<image-name>:<tag>-<revision>, where
+            # <repo> is derived from the GitHub repository URL and <image-name> is
+            # set per-component (imageName parameter, defaults to the component name).
+            # Auth comes from the registry-push-secret dockerconfigjson (a GitHub
+            # PAT with write:packages), materialised in the build namespace by the
+            # dockerfile-builder ClusterWorkflow from Vault key `registry-push-secret`.
+            REGISTRY_ENDPOINT="ghcr.io/rpcu"
+            REPO_NAME=$(basename "${GIT_REPO%/}" .git)
+            TARGET_IMAGE="${REGISTRY_ENDPOINT}/${REPO_NAME}/${SRC_IMAGE}"
             AUTH_FILE="/etc/secrets/registry-push-secret/.dockerconfigjson"
 
             echo ">> Source image: $SRC_IMAGE"
-            echo ">> Registry: $REGISTRY_ENDPOINT"
+            echo ">> Target image: $TARGET_IMAGE"
             echo ">> Authentication: $([ -f "$AUTH_FILE" ] && echo "registry secret found" || echo "no registry secret (anonymous push)")"
 
             if [ ! -f "/mnt/vol/app-image.tar" ]; then
@@ -64,17 +75,17 @@ spec:
 
             podman load -i /mnt/vol/app-image.tar
 
-            podman tag "$SRC_IMAGE" "$REGISTRY_ENDPOINT/$SRC_IMAGE"
+            podman tag "$SRC_IMAGE" "$TARGET_IMAGE"
 
             echo ">> Pushing image to registry"
             if [ -f "$AUTH_FILE" ]; then
-              podman push --tls-verify=true --authfile "$AUTH_FILE" "$REGISTRY_ENDPOINT/$SRC_IMAGE"
+              podman push --tls-verify=true --authfile "$AUTH_FILE" "$TARGET_IMAGE"
             else
-              podman push --tls-verify=true "$REGISTRY_ENDPOINT/$SRC_IMAGE"
+              podman push --tls-verify=true "$TARGET_IMAGE"
             fi
 
-            echo ">> Image published successfully: $REGISTRY_ENDPOINT/$SRC_IMAGE"
-            echo -n "$REGISTRY_ENDPOINT/$SRC_IMAGE" > /tmp/image.txt
+            echo ">> Image published successfully: $TARGET_IMAGE"
+            echo -n "$TARGET_IMAGE" > /tmp/image.txt
         securityContext:
           privileged: true
         volumeMounts:

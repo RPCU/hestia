@@ -100,6 +100,8 @@ spec:
             value: ${metadata.workflowRunName}-git-secret
           - name: registry-push-secret
             value: ${metadata.workflowRunName}-registry-push-secret
+          - name: workload-publisher-secret
+            value: ${metadata.workflowRunName}-workload-publisher-secret
       serviceAccountName: workflow-sa
       entrypoint: build-workflow
       templates:
@@ -204,3 +206,23 @@ spec:
               remoteRef:
                 key: registry-push-secret
                 property: value
+    - id: workload-publisher-secret
+      template:
+        apiVersion: external-secrets.io/v1
+        kind: ExternalSecret
+        metadata:
+          name: ${metadata.workflowRunName}-workload-publisher-secret
+          namespace: ${metadata.namespace}
+        spec:
+          refreshInterval: 15s
+          secretStoreRef:
+            name: ${workflowplane.secretStore}
+            kind: ClusterSecretStore
+          target:
+            name: ${metadata.workflowRunName}-workload-publisher-secret
+            creationPolicy: Owner
+          data:
+            - secretKey: client-secret
+              remoteRef:
+                key: thunderid
+                property: workflows-client-secret

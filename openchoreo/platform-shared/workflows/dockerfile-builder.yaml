@@ -92,6 +92,10 @@ spec:
               value:
                 type: string
                 description: "Build argument value"
+        imageName:
+          type: string
+          default: ""
+          description: "Image name segment pushed as ghcr.io/<org>/<repo>/<imageName>. Defaults to the component name when empty."
   runTemplate:
     apiVersion: argoproj.io/v1alpha1
     kind: Workflow
@@ -126,13 +130,15 @@ spec:
           - name: build-args
             value: ${parameters.buildArgs}
           - name: image-name
-            value: ${metadata.namespaceName}-${metadata.labels['openchoreo.dev/project']}-${metadata.labels['openchoreo.dev/component']}
+            value: "${has(parameters.imageName) && parameters.imageName != '' ? parameters.imageName : metadata.labels['openchoreo.dev/component']}"
           - name: image-tag
             value: v1
           - name: git-secret
             value: ${metadata.workflowRunName}-git-secret
           - name: registry-push-secret
             value: ${metadata.workflowRunName}-registry-push-secret
+          - name: workload-publisher-secret
+            value: ${metadata.workflowRunName}-workload-publisher-secret
       serviceAccountName: workflow-sa
       entrypoint: build-workflow
       templates:
@@ -241,3 +247,23 @@ spec:
               remoteRef:
                 key: registry-push-secret
                 property: value
+    - id: workload-publisher-secret
+      template:
+        apiVersion: external-secrets.io/v1
+        kind: ExternalSecret
+        metadata:
+          name: ${metadata.workflowRunName}-workload-publisher-secret
+          namespace: ${metadata.namespace}
+        spec:
+          refreshInterval: 15s
+          secretStoreRef:
+            name: ${workflowplane.secretStore}
+            kind: ClusterSecretStore
+          target:
+            name: ${metadata.workflowRunName}-workload-publisher-secret
+            creationPolicy: Owner
+          data:
+            - secretKey: client-secret
+              remoteRef:
+                key: thunderid
+                property: workflows-client-secret
