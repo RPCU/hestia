@@ -1,0 +1,145 @@
+# OpenChoreo observability modules (storage + ingestion), installed alongside
+# the observability-plane core in the central cluster. These provide the data
+# stores and adapters the observer queries.
+---
+# Logs module: OpenSearch (shared store) + logs adapter.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: observability-logs-opensearch
+  namespace: flux-system
+spec:
+  interval: 5m
+  targetNamespace: openchoreo-observability-plane
+  dependsOn:
+    - name: openchoreo-observability-plane
+    # Needs the OpenSearchCluster CRD provided by the operator.
+    - name: opensearch-operator
+  chart:
+    spec:
+      chart: observability-logs-opensearch
+      version: "0.5.3"
+      sourceRef:
+        kind: HelmRepository
+        name: openchoreo
+        namespace: flux-system
+  install:
+    createNamespace: true
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    openSearch:
+      enabled: false
+    openSearchCluster:
+      enabled: true
+      # Admin credentials come from the same Vault-backed secret the adapter,
+      # setup job and remote collectors use (username must be "admin").
+      credentialsSecretName: opensearch-admin-credentials
+      # SNI hostnames for the generated TLS passthrough TLSRoute; must match the
+      # gateway.tlsPassthrough.hostname on the observability-plane core and the SNI
+      # the remote clients present.
+      tlsRoute:
+        hostnames:
+          - "opensearch.platform.rpcu.lan"
+      # The OpenSearch operator seeds the cluster with a temporary bootstrap node,
+      # then deletes it as soon as the STS pods exist, relying on OpenSearch's
+      # voting-config auto-reconfiguration to promote the persistent masters. With a
+      # SINGLE master that handover loses quorum (bootstrap+master = 2 voters; when
+      # the bootstrap is removed the lone master can't elect itself) →
+      # cluster_manager_not_discovered deadlock. A 3-master quorum survives the
+      # bootstrap removal. Keep a single data node to stay light (yellow health).
+      nodePools:
+        master:
+          replicas: 3
+        data:
+          replicas: 2
+    openSearchSetup:
+      openSearchSecretName: opensearch-admin-credentials
+    adapter:
+      openSearchSecretName: opensearch-admin-credentials
+    # Collector runs on the remote data planes, not on the central plane.
+    fluent-bit:
+      enabled: false
+---
+# Metrics module: Prometheus (query/store side). Remote data planes push metrics
+# here (remote-write / federation) — configured per data plane later.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: observability-metrics-prometheus
+  namespace: flux-system
+spec:
+  interval: 5m
+  targetNamespace: openchoreo-observability-plane
+  dependsOn:
+    - name: openchoreo-observability-plane
+  chart:
+    spec:
+      chart: observability-metrics-prometheus
+      version: "0.6.1"
+      sourceRef:
+        kind: HelmRepository
+        name: openchoreo
+        namespace: flux-system
+  install:
+    createNamespace: true
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    global:
+      installationMode: multiClusterReceiver
+    prometheusCustomizations:
+      http:
+        hostnames:
+          - "prometheus.platform.rpcu.lan"
+    kube-prometheus-stack:
+      # The module default caps the operator at 60Mi, which OOMs it — give it room.
+      prometheusOperator:
+        resources:
+          requests:
+            cpu: 20m
+            memory: 64Mi
+          limits:
+            memory: 256Mi
+---
+# Traces module: reuses the OpenSearch instance from the logs module
+# (openSearch.enabled=false), plus the tracing adapter.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: observability-tracing-opensearch
+  namespace: flux-system
+spec:
+  interval: 5m
+  targetNamespace: openchoreo-observability-plane
+  dependsOn:
+    - name: observability-logs-opensearch
+  chart:
+    spec:
+      chart: observability-tracing-opensearch
+      version: "0.6.0"
+      sourceRef:
+        kind: HelmRepository
+        name: openchoreo
+        namespace: flux-system
+  install:
+    createNamespace: true
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    # Receiver side: the otel-collector receives OTLP from the remote data planes
+    # (exposed via an HTTPRoute on otel.platform.rpcu.lan) and writes traces into
+    # the shared OpenSearch from the logs module.
+    global:
+      installationMode: multiClusterReceiver
+    openSearch:
+      enabled: false
+    openSearchSetup:
+      openSearchSecretName: opensearch-admin-credentials
+    opentelemetryCollectorCustomizations:
+      http:
+        hostnames:
+          - "otel.platform.rpcu.lan"

@@ -1,0 +1,44 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: opensearch-operator
+  namespace: flux-system
+spec:
+  interval: 1h
+  url: https://opensearch-project.github.io/opensearch-k8s-operator/
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: opensearch-operator
+  namespace: flux-system
+spec:
+  interval: 5m
+  targetNamespace: openchoreo-observability-plane
+  dependsOn:
+    - name: openchoreo-observability-plane
+  chart:
+    spec:
+      chart: opensearch-operator
+      version: "2.8.0"
+      sourceRef:
+        kind: HelmRepository
+        name: opensearch-operator
+        namespace: flux-system
+  install:
+    createNamespace: true
+    crds: CreateReplace
+  upgrade:
+    crds: CreateReplace
+    remediation:
+      retries: 3
+  values:
+    fullnameOverride: opensearch-operator
+    manager:
+      dnsBase: platform.local
+    # The chart's default kube-rbac-proxy image (gcr.io/kubebuilder) is often
+    # unavailable; pin the maintained quay.io image (per the OpenChoreo docs).
+    kubeRbacProxy:
+      image:
+        repository: quay.io/brancz/kube-rbac-proxy
+        tag: v0.15.0

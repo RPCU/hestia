@@ -1,0 +1,66 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: openchoreo-observability-plane
+  namespace: flux-system
+spec:
+  interval: 5m
+  targetNamespace: openchoreo-observability-plane
+  chart:
+    spec:
+      chart: openchoreo-observability-plane
+      version: "1.2.2"
+      sourceRef:
+        kind: HelmRepository
+        name: openchoreo
+        namespace: flux-system
+  install:
+    createNamespace: true
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    kubernetesClusterDomain: platform.local
+    clusterAgent:
+      enabled: true
+      planeID: observability
+      serverUrl: "wss://cluster-gateway.platform.rpcu.lan/ws"
+      tls:
+        enabled: true
+        generateCerts: true
+        serverCAConfigMap: rpcu-ca-trust
+        caSecretName: ""
+    observer:
+      # OpenSearch admin creds (logs/traces store) — ExternalSecret in
+      # openchoreo-requirements/observability.yaml.
+      openSearchSecretName: opensearch-admin-credentials
+      secretName: observer-secret
+      oauthClientId: openchoreo-observer-resource-reader-client
+      controlPlaneApiUrl: "http://openchoreo-api.openchoreo-control-plane.svc.platform.local:8080"
+      http:
+        enabled: true
+        hostnames:
+          - "observer.platform.rpcu.lan"
+      extraEnvs:
+        - name: OBSERVER_BASE_URL
+          value: "https://observer.platform.rpcu.lan"
+        - name: AUTHZ_TIMEOUT
+          value: "30s"
+      cors:
+        allowedOrigins:
+          - "https://console.platform.rpcu.lan"
+    security:
+      oidc:
+        issuer: "https://thunderid.platform.rpcu.lan"
+        jwksUrl: "http://thunderid-service.thunderid.svc.platform.local:8090/oauth2/jwks"
+        tokenUrl: "http://thunderid-service.thunderid.svc.platform.local:8090/oauth2/token"
+    gateway:
+      tls:
+        enabled: true
+        hostname: "*.platform.rpcu.lan"
+        certificateRefs:
+          - name: wildcard-tls
+      tlsPassthrough:
+        enabled: true
+        hostname: "opensearch.platform.rpcu.lan"
+        port: 9443

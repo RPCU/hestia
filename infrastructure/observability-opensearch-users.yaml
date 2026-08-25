@@ -1,0 +1,47 @@
+# Least-privilege OpenSearch identity for the remote data planes' telemetry
+# collectors (Fluent Bit, otel events). They must NOT carry the `admin` superuser:
+# a compromised data plane would otherwise get full read/write/delete over every
+# tenant's data and the security config. This user can only CREATE + WRITE the
+# telemetry indices — never read, delete, or administer. Per-tenant isolation is
+# enforced separately, on the READ path, by the observer's OIDC authz.
+#
+# Managed declaratively by the OpenSearch operator (applied to the running cluster).
+apiVersion: opensearch.opster.io/v1
+kind: OpensearchRole
+metadata:
+  name: telemetry-writer
+  namespace: openchoreo-observability-plane
+spec:
+  opensearchCluster:
+    name: opensearch
+  clusterPermissions:
+    # Bulk ingestion (_bulk) + the version/health probe the collectors do on connect.
+    - cluster_composite_ops
+    - cluster_monitor
+  indexPermissions:
+    - indexPatterns:
+        - "container-logs-*"
+        - "k8s-events-*"
+        - "otel-traces-*"
+      # create_index auto-creates the daily indices; write covers doc indexing +
+      # mapping updates. No read / delete / manage.
+      allowedActions:
+        - create_index
+        - write
+---
+apiVersion: opensearch.opster.io/v1
+kind: OpensearchUser
+metadata:
+  # The CR name is the OpenSearch username the collectors authenticate as.
+  name: telemetry-writer
+  namespace: openchoreo-observability-plane
+spec:
+  opensearchCluster:
+    name: opensearch
+  # Password sourced from Vault via the ExternalSecret in
+  # openchoreo-requirements/observability.yaml (key opensearch/writer-password).
+  passwordFrom:
+    name: opensearch-telemetry-writer
+    key: password
+  opendistroSecurityRoles:
+    - telemetry-writer

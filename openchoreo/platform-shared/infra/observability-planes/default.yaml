@@ -1,0 +1,13 @@
+apiVersion: openchoreo.dev/v1alpha1
+kind: ClusterObservabilityPlane
+metadata:
+  name: default
+spec:
+  planeID: observability
+  clusterAgent:
+    clientCA:
+      secretKeyRef:
+        name: cluster-agent-tls
+        namespace: openchoreo-observability-plane
+        key: ca.crt
+  observerURL: https://observer.platform.rpcu.lan

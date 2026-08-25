@@ -1,0 +1,119 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openchoreo-observability-plane
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: opensearch-admin-credentials
+  namespace: openchoreo-observability-plane
+spec:
+  refreshInterval: "1h"
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: opensearch-admin-credentials
+  data:
+    - secretKey: username
+      remoteRef:
+        key: opensearch
+        property: username
+    - secretKey: password
+      remoteRef:
+        key: opensearch
+        property: password
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: observer-secret
+  namespace: openchoreo-observability-plane
+spec:
+  refreshInterval: "1h"
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: observer-secret
+  data:
+    - secretKey: UID_RESOLVER_OAUTH_CLIENT_SECRET
+      remoteRef:
+        key: observer
+        property: client-secret
+---
+# Password for the write-only telemetry-writer OpenSearch user (consumed by the
+# OpensearchUser CR in observability-opensearch-users.yaml). Distributed to the
+# remote data planes' collectors instead of the admin superuser.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: opensearch-telemetry-writer
+  namespace: openchoreo-observability-plane
+spec:
+  refreshInterval: "1h"
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: opensearch-telemetry-writer
+  data:
+    - secretKey: password
+      remoteRef:
+        key: opensearch
+        property: writer-password
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-tls
+  namespace: openchoreo-observability-plane
+spec:
+  secretName: wildcard-tls
+  dnsNames:
+    - "*.platform.rpcu.lan"
+  issuerRef:
+    kind: ClusterIssuer
+    name: vault-issuer
+---
+# OpenSearch internal PKI. The observability-logs-opensearch chart issues its
+# opensearch-http / opensearch-transport / opensearch-admin certificates from a
+# namespaced Issuer named "openchoreo-observability-plane-ca-issuer" (hardcoded in
+# the chart) but does NOT create it. All three certs must chain to ONE CA so the
+# OpenSearch nodes trust each other (transport mTLS) and the admin cert authenticates
+# — hence a dedicated self-signed CA, not per-cert self-signed issuers.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: opensearch-selfsigned-bootstrap
+  namespace: openchoreo-observability-plane
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: opensearch-ca
+  namespace: openchoreo-observability-plane
+spec:
+  isCA: true
+  commonName: opensearch-ca
+  secretName: opensearch-ca
+  duration: 87600h # 10 years
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  issuerRef:
+    name: opensearch-selfsigned-bootstrap
+    kind: Issuer
+---
+# The CA issuer the chart references by name for the OpenSearch cert secrets.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: openchoreo-observability-plane-ca-issuer
+  namespace: openchoreo-observability-plane
+spec:
+  ca:
+    secretName: opensearch-ca

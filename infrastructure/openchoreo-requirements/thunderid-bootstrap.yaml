@@ -32,3 +32,7 @@ spec:
       remoteRef:
         key: thunderid
         property: workflows-client-secret
+    - secretKey: observer-client-secret
+      remoteRef:
+        key: observer
+        property: client-secret

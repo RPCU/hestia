@@ -96,6 +96,14 @@ setup:
     - name: WORKFLOWS_CLIENT_SECRET
       secretName: thunderid-bootstrap
       secretKey: workflows-client-secret
+    # Strong Observer resource-reader client secret (used by the observability
+    # plane's observer uid-resolver to authenticate to the OpenChoreo API via
+    # client_credentials). Referenced in the 88-observer-app resource as
+    # {{ .OBSERVER_CLIENT_SECRET }}. Same Vault value the observability plane's
+    # observer-secret ExternalSecret consumes as UID_RESOLVER_OAUTH_CLIENT_SECRET.
+    - name: OBSERVER_CLIENT_SECRET
+      secretName: thunderid-bootstrap
+      secretKey: observer-client-secret
 # Custom declarative bootstrap resources (Pattern 1) — mounted ALONGSIDE the
 # chart's shipped defaults (default OU, Person user_type, admin user, flows,
 # Console app, themes). Applied by the in-process `thunderid bootstrap` importer.
@@ -582,7 +590,7 @@ bootstrap:
         - type: "oauth2"
           config:
             clientId: "openchoreo-observer-resource-reader-client"
-            clientSecret: "openchoreo-observer-resource-reader-client-secret"
+            clientSecret: "{{ .OBSERVER_CLIENT_SECRET }}"
             grantTypes:
               - "client_credentials"
             tokenEndpointAuthMethod: "client_secret_post"

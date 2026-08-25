@@ -13,5 +13,9 @@ spec:
         name: cluster-agent-tls
         namespace: openchoreo-workflow-plane
         key: ca.crt
+  # Ship build/workflow telemetry (logs) to the observability plane.
+  observabilityPlaneRef:
+    kind: ClusterObservabilityPlane
+    name: default
   secretStoreRef:
     name: vault-backend
