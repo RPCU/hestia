@@ -581,7 +581,7 @@ bootstrap:
                   validityPeriod: 3600
     88-observer-app.yaml: |
       resource_type: "application"
-      id: "019a0000-0000-7000-8000-000000000068"
+      id: "openchoreo-observer-resource-reader-client"
       name: "OpenChoreo Observer Resource Reader"
       description: "OpenChoreo Observer Resource Reader Client"
       type: "m2m"
