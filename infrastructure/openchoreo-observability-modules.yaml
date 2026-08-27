@@ -49,11 +49,26 @@ spec:
       # the bootstrap is removed the lone master can't elect itself) →
       # cluster_manager_not_discovered deadlock. A 3-master quorum survives the
       # bootstrap removal. Keep a single data node to stay light (yellow health).
+      #
+      # The chart's default limits (master 900Mi, data 1Gi) are too tight for
+      # OpenSearch 3.3 (~25 bundled plugins): auto heap ≈ 50% of the container +
+      # off-heap (Netty direct buffers, Lucene mmap, thread stacks) overflows the
+      # limit → OOMKilled (137) crashloop. 2Gi gives ~1Gi heap + room for off-heap.
       nodePools:
         master:
           replicas: 3
+          resources:
+            requests:
+              memory: 1Gi
+            limits:
+              memory: 2Gi
         data:
           replicas: 2
+          resources:
+            requests:
+              memory: 1Gi
+            limits:
+              memory: 2Gi
     openSearchSetup:
       openSearchSecretName: opensearch-admin-credentials
     adapter:
