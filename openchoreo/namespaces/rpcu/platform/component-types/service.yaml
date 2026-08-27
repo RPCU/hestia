@@ -13,9 +13,33 @@ spec:
       name: paketo-buildpacks-builder
     - kind: ClusterWorkflow
       name: ballerina-buildpack-builder
+  # Generic alert auto-applied to every service component.
+  # PE-locked parameters; per-env tuning via environmentConfigs.alerting (ReleaseBinding).
+  traits:
+    - kind: ClusterTrait
+      name: observability-alert-rule
+      instanceName: default-error-rate
+      parameters:
+        description: "Service emitted an application error (>=1 ERROR log in 1m)."
+        severity: critical
+        source:
+          type: log
+          query: "ERROR"
+        condition:
+          window: "1m"
+          interval: "1m"
+          operator: gt
+          threshold: 0
+      # Per-env knobs, wired from environmentConfigs.alerting below.
+      environmentConfigs:
+        enabled: "${has(environmentConfigs.alerting) && has(environmentConfigs.alerting.enabled) ? environmentConfigs.alerting.enabled : true}"
+        actions:
+          notifications:
+            channels: "${has(environmentConfigs.alerting) && has(environmentConfigs.alerting.channels) ? environmentConfigs.alerting.channels : []}"
+          incident:
+            enabled: "${has(environmentConfigs.alerting) && has(environmentConfigs.alerting.incident) ? environmentConfigs.alerting.incident : false}"
   allowedTraits:
     - name: api-configuration
-    - name: observability-alert-rule
   validations:
     - rule: "${size(workload.endpoints) > 0}"
       message: "Service components must have at least one endpoint. Use 'deployment/worker' for components without endpoints."
@@ -51,6 +75,25 @@ spec:
         imagePullPolicy:
           type: string
           default: IfNotPresent
+        # Per-env alerting knobs consumed by the embedded observability-alert-rule trait.
+        alerting:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+              default: true
+              description: "Enable the built-in alert rule in this environment."
+            channels:
+              type: array
+              items:
+                type: string
+              default: []
+              description: "Notification channels for this env. Empty = env default channel."
+            incident:
+              type: boolean
+              default: false
+              description: "Create an incident when the alert fires in this env."
+          default: {}
   resources:
     - id: deployment
       template:
