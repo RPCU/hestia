@@ -5,9 +5,29 @@ metadata:
 spec:
   planeID: observability
   clusterAgent:
+    # WORKAROUND (https://github.com/openchoreo/openchoreo/pull/4579): the resolver only reads
+    # clientCA.value, so secretKeyRef leaves it empty and CP finalizers fail with
+    # "agent mode must be enabled". The CA is a public cert, so inlining is safe.
+    # Refresh this value if cluster-agent-tls rotates.
     clientCA:
-      secretKeyRef:
-        name: cluster-agent-tls
-        namespace: openchoreo-observability-plane
-        key: ca.crt
+      value: |
+        -----BEGIN CERTIFICATE-----
+        MIIDDTCCAfWgAwIBAgIUHICz0MbL9tqDL1sLMsf80n+XFrIwDQYJKoZIhvcNAQEL
+        BQAwLTETMBEGA1UEChMKT3BlbkNob3JlbzEWMBQGA1UEAxMNb2JzZXJ2YWJpbGl0
+        eTAeFw0yNjA4MjUwOTM5NTdaFw0yNjExMjMwOTM5NTdaMC0xEzARBgNVBAoTCk9w
+        ZW5DaG9yZW8xFjAUBgNVBAMTDW9ic2VydmFiaWxpdHkwggEiMA0GCSqGSIb3DQEB
+        AQUAA4IBDwAwggEKAoIBAQC00fjz0/kPmx528Fp/4J+bXDMNV1gW95f+uX5/H0pv
+        Kt4Qxp5rVupAT5QkfPUD1C1RGXvhRwfIpUPEr7LuusjyjDtxDwGsYh9OOX4MVf0T
+        zNgOsglgmVkIv6yIlOUntoVnmU2PHyAg1crLINv6TyvA+7hYh4RBIw/LQA9L6Gqf
+        iTF40MxgfVQmgEeaNdX3wty7j77Bv/qAsS23ktHaGjMV8UyRkoiiwQ2VTbTs+v2M
+        bIqEfILbaSqPbADztjan9eO3yi3zknCjfnEQLxjjPzgLZI1ZuGt0v1HocHd990Ji
+        KGh6IyFs48KJSQZIcNuiinUvzO6tI7/ZzWzSheNSQL3XAgMBAAGjJTAjMBMGA1Ud
+        JQQMMAoGCCsGAQUFBwMCMAwGA1UdEwEB/wQCMAAwDQYJKoZIhvcNAQELBQADggEB
+        AJyH7pRcUHx/gLbkcwE32Um8wsG4PqqlpHSW4fHwF0WUPHhfV6Touz6q8ieWeF2u
+        pGUOv98UJDYMG3/UlTlTohxqOZB+AkLdR89+txQ9qZnN5gpmSBJWWr6vLxtJYNhT
+        99w6I01e7eWj+8CBP1Tm7wlT6YFPYFH8LJ1gaY4xOvTaRkUiPNraO5U+6scMPUpY
+        Gy6/nAst6PZFUOF3Sblx9m9cCFGbOYZNHhabYm50WlUouWTZh6QpRx6g+BrTjSpb
+        MGM8vNjW5nDtr/WyFIg8hARraSosIHNLr+pSEWuRzgsjX67538QQvJal6hP++s8m
+        +stgWkzF4emhjiFxxfgjNMY=
+        -----END CERTIFICATE-----
   observerURL: https://observer.platform.rpcu.lan
