@@ -31,6 +31,9 @@ spec:
       retries: 3
   values:
     kubernetesClusterDomain: platform.local
+    features:
+      secretManagement:
+        enabled: true
     openchoreoApi:
       clusterGateway:
         # Short in-cluster Service name (resolves via the search domain). The chart
