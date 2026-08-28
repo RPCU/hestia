@@ -28,8 +28,8 @@ spec:
         condition:
           window: "1m"
           interval: "1m"
-          operator: gt
-          threshold: 0
+          operator: gte
+          threshold: 1
       # Per-env knobs, wired from environmentConfigs.alerting below.
       # Set per environment via the component's ReleaseBinding.environmentConfigs.alerting.
       environmentConfigs:
