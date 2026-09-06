@@ -28,8 +28,6 @@ spec:
     - kind: Trait
       name: dragonfly
       instanceName: session-store
-      environmentConfigs:
-        enabled: '${!(has(environmentConfigs.env) && environmentConfigs.env.exists(e, e.name == "CHIHIRO_DEVMODE" && e.value == "true"))}'
     - kind: Trait
       name: rbac
       instanceName: capi-viewer
