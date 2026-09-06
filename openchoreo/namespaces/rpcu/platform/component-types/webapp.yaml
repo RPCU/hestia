@@ -99,18 +99,6 @@ spec:
               default: false
               description: 'Create an incident when the alert fires in this env.'
           default: {}
-        env:
-          type: array
-          items:
-            type: object
-            properties:
-              name:
-                type: string
-              value:
-                type: string
-            required: ['name', 'value']
-          default: []
-          description: 'Extra environment variables injected into the main container.'
   resources:
     - id: deployment
       template:
@@ -143,7 +131,7 @@ spec:
                     limits:
                       cpu: ${environmentConfigs.resources.limits.cpu}
                       memory: ${environmentConfigs.resources.limits.memory}
-                  env: '${has(environmentConfigs.env) ? dependencies.toContainerEnvs() + environmentConfigs.env.map(e, {name: e.name, value: e.value}) : dependencies.toContainerEnvs()}'
+                  env: ${dependencies.toContainerEnvs()}
                   envFrom: ${configurations.toContainerEnvFrom()}
                   volumeMounts: ${configurations.toContainerVolumeMounts()}
               volumes: ${configurations.toVolumes()}

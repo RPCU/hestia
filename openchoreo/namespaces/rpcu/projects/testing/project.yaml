@@ -24,10 +24,11 @@ spec:
   owner:
     projectName: testing
   environment: development
-  environmentConfigs:
-    env:
-      - name: CHIHIRO_DEVMODE
-        value: "true"
+  workloadOverrides:
+    container:
+      env:
+        - key: CHIHIRO_DEVMODE
+          value: "true"
 ---
 apiVersion: openchoreo.dev/v1alpha1
 kind: ProjectReleaseBinding
