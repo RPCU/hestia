@@ -1,0 +1,133 @@
+# Nix OCI build step for the OpenChoreo build pipeline.
+#
+# Drop-in replacement for the `containerfile-build` / buildpack `build-image`
+# steps: it consumes the checked-out source at /mnt/vol/source and produces
+# /mnt/vol/app-image.tar tagged ${IMAGE_NAME}:${GIT_REVISION}, which the shared
+# `publish-image` step then loads, retags to the registry and pushes.
+#
+# Instead of Podman + a Containerfile, it uses Nix: the app repo ships a Nix
+# expression that builds a reproducible OCI image (for chihiro: ./nix/oci.nix,
+# which uses dockerTools.streamLayeredImage). Because streamLayeredImage produces
+# a *script* that streams the image tarball to stdout, we run that script to a
+# temp tar, then use skopeo to re-tag the archive to the name OpenChoreo's
+# publish-image step expects. skopeo works on docker-archive files directly, so
+# no container daemon / privileged Podman is needed here.
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: nix-build
+spec:
+  templates:
+    - name: build-image
+      inputs:
+        parameters:
+          - name: git-revision
+          # Accepted for interface-compatibility with the other builders; Nix
+          # builds are hermetic, so build-env is not injected into the build.
+          - name: build-env
+          # Path (relative to app root) of the Nix expression that evaluates to a
+          # streamLayeredImage / buildLayeredImage derivation.
+          - name: nix-file
+          # Extra `--argstr key value` pairs passed to nix-build, as a JSON array
+          # of {name,value} objects (e.g. dockerVersion). Optional.
+          - name: nix-args
+      container:
+        image: nixos/nix:2.24.9
+        env:
+          - name: IMAGE_NAME
+            value: '{{workflow.parameters.image-name}}'
+          - name: GIT_REVISION
+            value: '{{inputs.parameters.git-revision}}'
+          - name: APP_PATH
+            value: '{{workflow.parameters.app-path}}'
+          - name: NIX_FILE
+            value: '{{inputs.parameters.nix-file}}'
+          - name: NIX_ARGS_JSON
+            value: '{{inputs.parameters.nix-args}}'
+        command:
+          - sh
+          - -c
+        args:
+          - |-
+            set -e
+
+            # Nix needs its experimental flake/command config off (we use classic
+            # nix-build) but does need network access to fetch the nixpkgs channel.
+            export NIX_CONFIG="experimental-features ="
+            mkdir -p /etc/nix
+            echo "sandbox = false" >> /etc/nix/nix.conf
+
+            APP_DIR="/mnt/vol/source"
+            [ "$APP_PATH" = "." ] || [ -z "$APP_PATH" ] || APP_DIR="/mnt/vol/source/${APP_PATH#/}"
+
+            IMAGE="${IMAGE_NAME}:${GIT_REVISION}"
+
+            echo ">> Image: $IMAGE"
+            echo ">> App dir: $APP_DIR"
+            echo ">> Nix file: $NIX_FILE"
+
+            if [ ! -d "$APP_DIR" ]; then
+              echo ">> Error: app path '$APP_PATH' does not exist in the repository"
+              ls -la /mnt/vol/source/
+              exit 1
+            fi
+            if [ ! -f "$APP_DIR/$NIX_FILE" ]; then
+              echo ">> Error: Nix file not found at '$NIX_FILE' (relative to app path)"
+              echo ">> Repository contents:"
+              ls -la "$APP_DIR"
+              exit 1
+            fi
+
+            cd "$APP_DIR"
+
+            # A nixpkgs channel is required for `import <nixpkgs>`. Pin to a
+            # release channel for reproducibility across runs.
+            nix-channel --add https://nixos.org/channels/nixos-26.05 nixpkgs
+            nix-channel --update
+
+            # Build the extra --argstr flags from NIX_ARGS_JSON (JSON array of
+            # {name,value}). Values are passed as strings. jq comes from the
+            # nixpkgs channel; we shell into it once and emit tab-separated pairs.
+            set --
+            if [ -n "$NIX_ARGS_JSON" ] && [ "$NIX_ARGS_JSON" != "[]" ]; then
+              printf '%s' "$NIX_ARGS_JSON" > /tmp/nix-args.json
+              args_kv=$(nix-shell -p jq --run \
+                'jq -r ".[] | [.name, .value] | @tsv" /tmp/nix-args.json')
+              OLDIFS=$IFS
+              IFS='
+            '
+              for line in $args_kv; do
+                key=$(printf '%s' "$line" | cut -f1)
+                val=$(printf '%s' "$line" | cut -f2)
+                [ -n "$key" ] && set -- "$@" --argstr "$key" "$val"
+              done
+              IFS=$OLDIFS
+            fi
+
+            echo ">> Building OCI image with Nix"
+            # streamLayeredImage: nix-build yields a path to a script that streams
+            # the image tar to stdout. buildLayeredImage would yield the tar path
+            # directly; handle both.
+            OUT=$(nix-build "$NIX_FILE" --no-out-link "$@")
+            echo ">> nix-build output: $OUT"
+
+            RAW_TAR="/mnt/vol/nix-image.tar"
+            if [ -x "$OUT" ] || head -c2 "$OUT" 2>/dev/null | grep -q '#!'; then
+              echo ">> Streaming image via output script"
+              "$OUT" > "$RAW_TAR"
+            else
+              echo ">> Using image tar produced directly by nix-build"
+              cp "$OUT" "$RAW_TAR"
+            fi
+
+            # Re-tag the archive to the ref OpenChoreo's publish-image expects.
+            # skopeo operates on docker-archive files with no daemon.
+            echo ">> Re-tagging archive to $IMAGE with skopeo"
+            nix-shell -p skopeo --run \
+              "skopeo copy --insecure-policy docker-archive:${RAW_TAR} docker-archive:/mnt/vol/app-image.tar:${IMAGE}"
+
+            rm -f "$RAW_TAR"
+            echo ">> Image built successfully: /mnt/vol/app-image.tar ($IMAGE)"
+        volumeMounts:
+          - mountPath: /mnt/vol
+            name: workspace

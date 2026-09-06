@@ -10,6 +10,9 @@ spec:
           - name: git-revision
             valueFrom:
               path: /tmp/git-revision.txt
+          - name: git-tag
+            valueFrom:
+              path: /tmp/git-tag.txt
       volumes:
         - name: git-secret
           secret:
@@ -152,6 +155,19 @@ spec:
                 COMMIT_SHA=$(git rev-parse HEAD)
                 echo -n "$COMMIT_SHA" | cut -c1-8 > /tmp/git-revision.txt
                 echo ">> Checked out branch: $BRANCH (commit: $COMMIT_SHA)"
+            fi
+
+            # Check if the checked-out commit has a git tag. Use it as the
+            # image tag when present so that tagged releases produce human-
+            # readable OCI refs (e.g. v1.2.3) instead of raw SHAs.
+            # Fetch tags pointing at HEAD (shallow clones don't include them).
+            git fetch --depth 1 origin "refs/tags/*:refs/tags/*" 2>/dev/null || true
+            GIT_TAG=$(git tag --points-at HEAD 2>/dev/null | head -1)
+            echo -n "${GIT_TAG}" > /tmp/git-tag.txt
+            if [ -n "$GIT_TAG" ]; then
+              echo ">> Commit is tagged: $GIT_TAG"
+            else
+              echo ">> No tag on this commit"
             fi
 
             echo ">> Repository cloned successfully"

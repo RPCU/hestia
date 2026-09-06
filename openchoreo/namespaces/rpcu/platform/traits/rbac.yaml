@@ -1,0 +1,108 @@
+# Trait for granting cluster-scoped RBAC to a component
+# Namespace-scoped: available to Components in the rpcu namespace.
+#
+# Creates a dedicated ServiceAccount, a ClusterRole with the supplied rules and
+# a ClusterRoleBinding tying them together, then patches the Deployment to run
+# under that ServiceAccount.
+#
+# A dedicated ServiceAccount is used rather than the namespace "default" so the
+# granted permissions apply only to this component and are not inherited by
+# every other pod scheduled into the same dataplane namespace.
+#
+# Usage in a Component:
+#   traits:
+#     - name: rbac
+#       instanceName: capi-viewer
+#       parameters:
+#         rules:
+#           - apiGroups: ["cluster.x-k8s.io"]
+#             resources: ["clusters"]
+#             verbs: ["get", "list", "watch"]
+apiVersion: openchoreo.dev/v1alpha1
+kind: Trait
+metadata:
+  name: rbac
+  namespace: rpcu
+spec:
+  parameters:
+    openAPIV3Schema:
+      type: object
+      properties:
+        rules:
+          type: array
+          items:
+            type: object
+            properties:
+              apiGroups:
+                type: array
+                items:
+                  type: string
+                description: "API groups the rule applies to. Use \"\" for the core group."
+              resources:
+                type: array
+                items:
+                  type: string
+                description: "Resources the rule applies to."
+              verbs:
+                type: array
+                items:
+                  type: string
+                description: "Verbs allowed on the listed resources."
+              resourceNames:
+                type: array
+                items:
+                  type: string
+                description: "Optional list of specific resource names to restrict the rule to."
+            required:
+              - apiGroups
+              - resources
+              - verbs
+          description: "ClusterRole policy rules granted to the component."
+      required:
+        - rules
+
+  creates:
+    - targetPlane: dataplane
+      template:
+        apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: ${metadata.name}-${trait.instanceName}
+          namespace: ${metadata.namespace}
+          labels: ${metadata.labels}
+
+    - targetPlane: dataplane
+      template:
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRole
+        metadata:
+          name: ${metadata.namespace}-${metadata.name}-${trait.instanceName}
+          labels: ${metadata.labels}
+        rules: ${parameters.rules}
+
+    - targetPlane: dataplane
+      template:
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: ${metadata.namespace}-${metadata.name}-${trait.instanceName}
+          labels: ${metadata.labels}
+        roleRef:
+          apiGroup: rbac.authorization.k8s.io
+          kind: ClusterRole
+          name: ${metadata.namespace}-${metadata.name}-${trait.instanceName}
+        subjects:
+          - kind: ServiceAccount
+            name: ${metadata.name}-${trait.instanceName}
+            namespace: ${metadata.namespace}
+
+  patches:
+    - target:
+        group: apps
+        version: v1
+        kind: Deployment
+      targetPlane: dataplane
+      operations:
+        - op: add
+          path: /spec/template/spec/serviceAccountName
+          value: ${metadata.name}-${trait.instanceName}

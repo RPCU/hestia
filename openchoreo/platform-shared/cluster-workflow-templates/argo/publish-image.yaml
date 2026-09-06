@@ -9,6 +9,8 @@ spec:
       inputs:
         parameters:
           - name: git-revision
+          - name: git-tag
+            default: ""
       outputs:
         parameters:
           - name: image
@@ -27,10 +29,10 @@ spec:
         env:
           - name: GIT_REVISION
             value: "{{inputs.parameters.git-revision}}"
+          - name: GIT_TAG
+            value: "{{inputs.parameters.git-tag}}"
           - name: IMAGE_NAME
             value: "{{workflow.parameters.image-name}}"
-          - name: IMAGE_TAG
-            value: "{{workflow.parameters.image-tag}}"
         command:
           - sh
           - -c
@@ -38,20 +40,23 @@ spec:
           - |-
             set -e
 
-            SRC_IMAGE="${IMAGE_NAME}:${IMAGE_TAG}-${GIT_REVISION}"
-
             # RPCU: push built images to the self-hosted zot registry under a fixed
-            # `public` namespace: zot.rpcu.io/public/<image-name>:<tag>-<revision>.
-            # <image-name> is set per-component (imageName parameter, defaults to the
-            # component name). Auth comes from the registry-push-secret dockerconfigjson
-            # (a zot htpasswd user) from Vault key `registry-push-secret`. zot creates
-            # repos on push; the `public` path allows anonymous pull, so there are no
-            # per-package rights and no data-plane pull secret.
+            # `public` namespace: zot.rpcu.io/public/<image-name>:<tag>.
+            # The tag is the git tag when the commit is tagged (e.g. v1.2.3),
+            # otherwise the commit SHA. Auth comes from the registry-push-secret
+            # dockerconfigjson (a zot htpasswd user from Vault key
+            # `registry-push-secret`). zot creates repos on push; the `public`
+            # path allows anonymous pull, so there are no per-package rights and
+            # no data-plane pull secret.
             REGISTRY_ENDPOINT="zot.rpcu.io/public"
-            TARGET_IMAGE="${REGISTRY_ENDPOINT}/${SRC_IMAGE}"
+            if [ -n "$GIT_TAG" ]; then
+              IMAGE_TAG="$GIT_TAG"
+            else
+              IMAGE_TAG="$GIT_REVISION"
+            fi
+            TARGET_IMAGE="${REGISTRY_ENDPOINT}/${IMAGE_NAME}:${IMAGE_TAG}"
             AUTH_FILE="/etc/secrets/registry-push-secret/.dockerconfigjson"
 
-            echo ">> Source image: $SRC_IMAGE"
             echo ">> Target image: $TARGET_IMAGE"
             echo ">> Authentication: $([ -f "$AUTH_FILE" ] && echo "registry secret found" || echo "no registry secret (anonymous push)")"
 
@@ -70,8 +75,16 @@ spec:
             [storage.options.overlay]
             EOF
 
-            podman load -i /mnt/vol/app-image.tar
+            LOADED_OUTPUT=$(podman load -i /mnt/vol/app-image.tar)
+            echo ">> $LOADED_OUTPUT"
+            SRC_IMAGE=$(echo "$LOADED_OUTPUT" | grep "Loaded image:" | head -1 | sed 's/Loaded image: //')
 
+            if [ -z "$SRC_IMAGE" ]; then
+              echo ">> Error: Could not determine loaded image name from podman load output"
+              exit 1
+            fi
+
+            echo ">> Source image: $SRC_IMAGE"
             podman tag "$SRC_IMAGE" "$TARGET_IMAGE"
 
             echo ">> Pushing image to registry"

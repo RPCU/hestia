@@ -1,11 +1,11 @@
 apiVersion: openchoreo.dev/v1alpha1
 kind: ClusterWorkflow
 metadata:
-  name: paketo-buildpacks-builder
+  name: nix-builder
   labels:
     openchoreo.dev/workflow-type: "component"
   annotations:
-    openchoreo.dev/description: "Supports building Java, Node.js, Python, Go, .NET, Ruby, PHP, and more. See https://paketo.io/docs/"
+    openchoreo.dev/description: "Build a reproducible OCI image from a repo's Nix expression (dockerTools.streamLayeredImage / buildLayeredImage)"
 spec:
   workflowPlaneRef:
     kind: ClusterWorkflowPlane
@@ -30,7 +30,7 @@ spec:
             secretRef:
               type: string
               default: ""
-              description: "Secret reference name for private repository Git credentials (optional for public repos)"
+              description: "Secret reference name for Git credentials"
               x-openchoreo-component-parameter-repository-secret-ref: true
             revision:
               type: object
@@ -44,27 +44,52 @@ spec:
                 commit:
                   type: string
                   default: ""
-                  description: "Git commit SHA or reference (optional, defaults to latest commit on branch)"
+                  description: "Git commit SHA or reference (optional, defaults to latest)"
                   x-openchoreo-component-parameter-repository-commit: true
             appPath:
               type: string
               default: "."
               description: "Path to the application directory within the repository"
               x-openchoreo-component-parameter-repository-app-path: true
+        nix:
+          type: object
+          default: {}
+          description: "Nix build configuration"
+          properties:
+            file:
+              type: string
+              default: "./nix/oci.nix"
+              description: "Path to the Nix expression (relative to appPath) that evaluates to a streamLayeredImage/buildLayeredImage derivation"
+            args:
+              type: array
+              default: []
+              description: "Extra --argstr key/value pairs passed to nix-build (e.g. dockerVersion). Values are passed as strings."
+              items:
+                type: object
+                required: [name, value]
+                properties:
+                  name:
+                    type: string
+                    description: "nix-build --argstr name"
+                  value:
+                    type: string
+                    description: "nix-build --argstr value"
         buildEnv:
           type: array
           default: []
-          description: "Build-time environment variables passed to the buildpack (e.g. BP_JVM_VERSION=21, BP_NODE_RUN_SCRIPTS=build, BP_WEB_SERVER=nginx). Reference: https://paketo.io/docs/howto/configuration/#environment-variables"
+          description: "Accepted for compatibility with other builders; Nix builds are hermetic and do not consume these."
           items:
             type: object
             required: [name, value]
             properties:
               name:
                 type: string
-                description: "Environment variable name"
               value:
                 type: string
-                description: "Environment variable value"
+        imageName:
+          type: string
+          default: ""
+          description: "Image name segment pushed as <registry>/<imageName>. Defaults to the component name when empty."
   runTemplate:
     apiVersion: argoproj.io/v1alpha1
     kind: Workflow
@@ -90,13 +115,14 @@ spec:
             value: ${parameters.repository.revision.commit}
           - name: app-path
             value: ${parameters.repository.appPath}
+          - name: nix-file
+            value: ${parameters.nix.file}
+          - name: nix-args
+            value: ${parameters.nix.args}
           - name: build-env
             value: ${parameters.buildEnv}
-          # PE-controlled parameters
           - name: image-name
-            value: ${metadata.namespaceName}-${metadata.labels['openchoreo.dev/project']}-${metadata.labels['openchoreo.dev/component']}
-          - name: image-tag
-            value: v1
+            value: "${has(parameters.imageName) && parameters.imageName != '' ? parameters.imageName : metadata.labels['openchoreo.dev/component']}"
           - name: git-secret
             value: ${metadata.workflowRunName}-git-secret
           - name: registry-push-secret
@@ -115,13 +141,19 @@ spec:
                   template: checkout
             - - name: build-image
                 templateRef:
-                  name: paketo-buildpacks-build
+                  name: nix-build
                   clusterScope: true
                   template: build-image
                 arguments:
                   parameters:
                     - name: git-revision
-                      value: "{{steps.checkout-source.outputs.parameters.git-revision}}"
+                      value: '{{steps.checkout-source.outputs.parameters.git-revision}}'
+                    - name: build-env
+                      value: '{{workflow.parameters.build-env}}'
+                    - name: nix-file
+                      value: '{{workflow.parameters.nix-file}}'
+                    - name: nix-args
+                      value: '{{workflow.parameters.nix-args}}'
             - - name: publish-image
                 templateRef:
                   name: publish-image
@@ -130,9 +162,9 @@ spec:
                 arguments:
                   parameters:
                     - name: git-revision
-                      value: "{{steps.checkout-source.outputs.parameters.git-revision}}"
+                      value: '{{steps.checkout-source.outputs.parameters.git-revision}}'
                     - name: git-tag
-                      value: "{{steps.checkout-source.outputs.parameters.git-tag}}"
+                      value: '{{steps.checkout-source.outputs.parameters.git-tag}}'
             - - name: generate-workload-cr
                 templateRef:
                   name: generate-workload
@@ -141,9 +173,9 @@ spec:
                 arguments:
                   parameters:
                     - name: image
-                      value: "{{steps.publish-image.outputs.parameters.image}}"
+                      value: '{{steps.publish-image.outputs.parameters.image}}'
                     - name: run-name
-                      value: "{{workflow.parameters.workflowrun-name}}"
+                      value: '{{workflow.parameters.workflowrun-name}}'
       volumeClaimTemplates:
         - metadata:
             name: workspace
@@ -152,7 +184,7 @@ spec:
               - ReadWriteOnce
             resources:
               requests:
-                storage: 2Gi
+                storage: 4Gi
   externalRefs:
     - id: git-secret-reference
       apiVersion: openchoreo.dev/v1alpha1
