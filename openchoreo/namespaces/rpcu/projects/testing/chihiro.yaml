@@ -413,12 +413,6 @@ spec:
           value: '9'
         - key: CHIHIRO_DEVMODE
           value: 'true'
-    endpoints:
-      http:
-        type: HTTP
-        port: 8080
-        visibility:
-          - external
 ---
 apiVersion: openchoreo.dev/v1alpha1
 kind: ReleaseBinding
@@ -788,9 +782,3 @@ spec:
           value: '9'
         - key: CHIHIRO_DEVMODE
           value: 'false'
-    endpoints:
-      http:
-        type: HTTP
-        port: 8080
-        visibility:
-          - external
