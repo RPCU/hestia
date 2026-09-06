@@ -20,28 +20,30 @@ spec:
       name: observability-alert-rule
       instanceName: default-error-rate
       parameters:
-        description: "Service emitted an application error (>=1 ERROR log in 1m)."
+        description: 'Service emitted an application error (>=1 ERROR log in 1m).'
         severity: critical
         source:
           type: log
-          query: "ERROR"
+          query: 'ERROR'
         condition:
-          window: "1m"
-          interval: "1m"
+          window: '1m'
+          interval: '1m'
           operator: gte
           threshold: 1
       # Per-env knobs, wired from environmentConfigs.alerting below.
       environmentConfigs:
-        enabled: "${has(environmentConfigs.alerting) && has(environmentConfigs.alerting.enabled) ? environmentConfigs.alerting.enabled : true}"
+        enabled: '${has(environmentConfigs.alerting) && has(environmentConfigs.alerting.enabled) ? environmentConfigs.alerting.enabled : true}'
         actions:
           notifications:
-            channels: "${has(environmentConfigs.alerting) && has(environmentConfigs.alerting.channels) ? environmentConfigs.alerting.channels : []}"
+            channels: '${has(environmentConfigs.alerting) && has(environmentConfigs.alerting.channels) ? environmentConfigs.alerting.channels : []}'
           incident:
-            enabled: "${has(environmentConfigs.alerting) && has(environmentConfigs.alerting.incident) ? environmentConfigs.alerting.incident : false}"
+            enabled: '${has(environmentConfigs.alerting) && has(environmentConfigs.alerting.incident) ? environmentConfigs.alerting.incident : false}'
   allowedTraits:
     - name: api-configuration
+    - name: dragonfly
+    - name: rbac
   validations:
-    - rule: "${size(workload.endpoints) > 0}"
+    - rule: '${size(workload.endpoints) > 0}'
       message: "Service components must have at least one endpoint. Use 'deployment/worker' for components without endpoints."
   environmentConfigs:
     openAPIV3Schema:
@@ -52,25 +54,25 @@ spec:
           properties:
             cpu:
               type: string
-              default: "100m"
+              default: '100m'
             memory:
               type: string
-              default: "256Mi"
+              default: '256Mi'
         ResourceRequirements:
           type: object
           properties:
             requests:
-              $ref: "#/$defs/ResourceQuantity"
+              $ref: '#/$defs/ResourceQuantity'
               default: {}
             limits:
-              $ref: "#/$defs/ResourceQuantity"
+              $ref: '#/$defs/ResourceQuantity'
               default: {}
       properties:
         replicas:
           type: integer
           default: 1
         resources:
-          $ref: "#/$defs/ResourceRequirements"
+          $ref: '#/$defs/ResourceRequirements'
           default: {}
         imagePullPolicy:
           type: string
@@ -82,18 +84,30 @@ spec:
             enabled:
               type: boolean
               default: true
-              description: "Enable the built-in alert rule in this environment."
+              description: 'Enable the built-in alert rule in this environment.'
             channels:
               type: array
               items:
                 type: string
               default: []
-              description: "Notification channels for this env. Empty = env default channel."
+              description: 'Notification channels for this env. Empty = env default channel.'
             incident:
               type: boolean
               default: false
-              description: "Create an incident when the alert fires in this env."
+              description: 'Create an incident when the alert fires in this env.'
           default: {}
+        env:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              value:
+                type: string
+            required: ['name', 'value']
+          default: []
+          description: 'Extra environment variables injected into the main container.'
   resources:
     - id: deployment
       template:
@@ -126,7 +140,7 @@ spec:
                     limits:
                       cpu: ${environmentConfigs.resources.limits.cpu}
                       memory: ${environmentConfigs.resources.limits.memory}
-                  env: ${dependencies.toContainerEnvs()}
+                  env: ${has(environmentConfigs.env) ? dependencies.toContainerEnvs() + environmentConfigs.env.map(e, {name: e.name, value: e.value}) : dependencies.toContainerEnvs()}
                   envFrom: ${configurations.toContainerEnvFrom()}
                   volumeMounts: ${configurations.toContainerVolumeMounts()}
               volumes: ${configurations.toVolumes()}

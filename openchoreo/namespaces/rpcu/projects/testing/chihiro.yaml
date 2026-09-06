@@ -1,0 +1,430 @@
+apiVersion: openchoreo.dev/v1alpha1
+kind: Component
+metadata:
+  name: chihiro
+  namespace: rpcu
+  annotations:
+    openchoreo.dev/display-name: 'Chihiro'
+  labels:
+    openchoreo.dev/project: testing
+spec:
+  owner:
+    projectName: testing
+  componentType:
+    kind: ComponentType
+    name: deployment/web-application
+  workflow:
+    kind: ClusterWorkflow
+    name: nix-builder
+    parameters:
+      nix:
+        file: ./nix/oci.nix
+      repository:
+        url: https://github.com/RPCU/chihiro
+        appPath: .
+        revision:
+          branch: main
+  traits:
+    - kind: Trait
+      name: dragonfly
+      instanceName: session-store
+      environmentConfigs:
+        enabled: '${!(has(environmentConfigs.env) && environmentConfigs.env.exists(e, e.name == "CHIHIRO_DEVMODE" && e.value == "true"))}'
+    - kind: Trait
+      name: rbac
+      instanceName: capi-viewer
+      parameters:
+        rules:
+          # Namespace listing for the cluster/namespace pickers.
+          - apiGroups: ['']
+            resources: ['namespaces']
+            verbs: ['get', 'list', 'watch']
+          # Cluster CA certificates, embedded into generated kubeconfigs.
+          - apiGroups: ['']
+            resources: ['secrets']
+            verbs: ['get']
+          # CAPI resources rendered in the dashboard.
+          - apiGroups: ['cluster.x-k8s.io']
+            resources:
+              ['clusters', 'machinesets', 'machines', 'machinedeployments']
+            verbs: ['get', 'list', 'watch']
+          # Cluster lifecycle actions driven from the UI.
+          - apiGroups: ['cluster.x-k8s.io']
+            resources: ['clusters']
+            verbs: ['create', 'update', 'patch', 'delete']
+          # Provider resources shown in cluster detail views.
+          - apiGroups: ['infrastructure.cluster.x-k8s.io']
+            resources: ['*']
+            verbs: ['get', 'list', 'watch']
+          - apiGroups: ['controlplane.cluster.x-k8s.io']
+            resources: ['*']
+            verbs: ['get', 'list', 'watch']
+          - apiGroups: ['bootstrap.cluster.x-k8s.io']
+            resources: ['*']
+            verbs: ['get', 'list', 'watch']
+---
+apiVersion: openchoreo.dev/v1alpha1
+kind: Workload
+metadata:
+  name: chihiro-workload
+  namespace: rpcu
+  labels:
+    openchoreo.dev/project: testing
+spec:
+  owner:
+    projectName: testing
+    componentName: chihiro
+  container:
+    image: zot.rpcu.io/public/chihiro:latest
+    command: ['/chihiro']
+    args: ['serve', '--config=/config.yaml']
+    files:
+      - key: config.yaml
+        mountPath: /
+        value: |
+          cluster:
+            injections:
+              name:
+                path: metadata.name
+              version:
+                path: spec.topology.version
+                label: "Kubernetes Version"
+                editable: true
+              serviceDomain:
+                path: spec.clusterNetwork.serviceDomain
+              groups:
+                label: "Access Groups"
+                editable: true
+              workerGroups:
+                path: spec.topology.workers.machineDeployments
+                label: "Worker Groups"
+                editable: true
+              controlPlaneReplicas:
+                path: spec.topology.controlPlane.replicas
+                label: "Control Plane Replicas"
+                editable: true
+                min: 1
+                max: 9
+            worker_group_fields:
+              name:
+                label: "Group name"
+                type: string
+                required: true
+                order: 0
+              class:
+                label: "Class"
+                type: select
+                options:
+                  - default-worker
+                default: default-worker
+                order: 1
+              flavor:
+                label: "Flavor"
+                type: select
+                options:
+                  - medium
+                  - xmedium
+                  - large
+                  - mono-large
+                  - duo-large
+                  - xlarge
+                  - bis-xlarge
+                  - cis-xlarge
+                default: xmedium
+                order: 2
+              replicas:
+                label: "Replicas"
+                type: number
+                default: "1"
+                min: 0
+                max: 10
+                order: 3
+            worker_group_template: |
+              name: {{ chihiro.field.name }}
+              class: {{ chihiro.field.class }}
+              replicas: {{ chihiro.field.replicas }}
+              variables:
+                overrides:
+                  - name: workerFlavor
+                    value: {{ chihiro.field.flavor }}
+            template: |
+              apiVersion: cluster.x-k8s.io/v1beta2
+              kind: Cluster
+              metadata:
+                namespace: mgmt
+                annotations:
+                  sveltos.argus.rpcu.io/capo-version: {{ chihiro.capoversion }}
+                labels:
+                  sveltos.argus.rpcu.io/oidc-rbac: {{ chihiro.oidcrbac }}
+                  sveltos.argus.rpcu.io/cilium: {{ chihiro.cilium }}
+                  sveltos.argus.rpcu.io/openstack-integration: {{ chihiro.openstack }}
+                  sveltos.argus.rpcu.io/capi-management: {{ chihiro.mgmt }}
+                  sveltos.argus.rpcu.io/vault-auth: {{ chihiro.vault }}
+                  sveltos.argus.rpcu.io/cert-manager: {{ chihiro.certmanager }}
+                  sveltos.argus.rpcu.io/external-dns: {{ chihiro.externaldns }}
+                  sveltos.argus.rpcu.io/gateway-api: {{ chihiro.gatewayapi }}
+                  sveltos.argus.rpcu.io/csi-driver-nfs: {{ chihiro.csidrivernfs }}
+                  sveltos.argus.rpcu.io/dragonfly: {{ chihiro.dragonfly }}
+                  sveltos.argus.rpcu.io/monitoring: {{ chihiro.monitoring }}
+                  sveltos.argus.rpcu.io/kamaji-apiserver-proxy: "enabled"
+                  dike.rpcu.io/enabled: "true"
+                  type: workload
+              spec:
+                clusterNetwork:
+                  pods:
+                    cidrBlocks:
+                      - {{ chihiro.podcidr }}
+                  serviceDomain: ignore
+                  services:
+                    cidrBlocks:
+                      - {{ chihiro.servicecidr }}
+                topology:
+                  classRef:
+                    name: openstack-kamaji-external
+                  controlPlane:
+                    replicas: 0
+                  variables:
+                    - name: identityRef
+                      value:
+                        name: mgmt-cloud-config
+                        cloudName: {{ chihiro.cloudname }}
+                    - name: externalNetworkId
+                      value: 1cfd69da-057c-4748-a0d4-de5b0ca77db2
+                    - name: imageName
+                      value: {{ chihiro.imagename }}
+                    - name: oidc
+                      value:
+                        enabled: true
+                        issuerURL: https://rpcu-gabeck.eu1.zitadel.cloud
+                        clientID: "377050089077613929"
+                    - name: managedSubnetCIDR
+                      value: {{ chihiro.managedsubnetcidr }}
+                    - name: gatewayHostname
+                      value: {{ chihiro.gatewayhostname }}
+                    - name: gatewayName
+                      value: {{ chihiro.gatewayname }}
+                    - name: externalKubeconfigSecretName
+                      value: production-kubeconfig
+                  version: "0.0.0"
+            parameters:
+              cloudname:
+                label: "Openstack Project"
+                description: "OpenStack cloud project to provision into"
+                type: select
+                options:
+                  - value: "openstack"
+                    label: "admin"
+                  - value: "lab"
+                    label: "lab"
+                  - value: "production"
+                    label: "production"
+                default: lab
+              podcidr:
+                label: "Pod CIDR"
+                description: "CIDR block for pod networking"
+                type: string
+                default: "10.207.0.0/16"
+              servicecidr:
+                label: "Service CIDR"
+                description: "CIDR block for service networking"
+                type: string
+                default: "10.107.0.0/16"
+              imagename:
+                label: "Node Image"
+                description: "OpenStack image for cluster nodes"
+                type: select
+                options:
+                  - value: "hephaestus-kaas-25.11-{{ chihiro.version }}"
+                    label: "25.11"
+                    constrain:
+                      version: ["v1.35.4"]
+                  - value: "hephaestus-kaas-2-26.05-{{ chihiro.version }}"
+                    label: "26.05-2"
+                    constrain:
+                      version: ["v1.36.1"]
+                default: "hephaestus-kaas-26.05-{{ chihiro.version }}"
+                editable: true
+                path: "spec.topology.variables[2].value"
+              managedsubnetcidr:
+                label: "Managed Subnet CIDR"
+                description: "CIDR block for the managed subnet"
+                type: string
+                default: "192.168.1.0/24"
+              cilium:
+                label: "Cilium CNI"
+                description: "Enable the Cilium addon via Sveltos"
+                type: boolean
+                default: true
+                true_value: enabled
+                false_value: disabled
+                editable: true
+                path: "metadata.labels.'sveltos.argus.rpcu.io/cilium'"
+              oidcrbac:
+                label: "OIDC RBAC"
+                description: "Enable OIDC RBAC addon via Sveltos"
+                type: boolean
+                default: true
+                true_value: enabled
+                false_value: disabled
+                editable: true
+                path: "metadata.labels.'sveltos.argus.rpcu.io/oidc-rbac'"
+                visible_groups:
+                  - kube-admin
+              openstack:
+                label: "Openstack Integration"
+                description: "Enable Service Type LB using Octavia and CSI using Cinder"
+                type: boolean
+                default: false
+                true_value: enabled
+                false_value: disabled
+                editable: true
+                path: "metadata.labels.'sveltos.argus.rpcu.io/openstack-integration'"
+              mgmt:
+                label: "Management Cluster"
+                description: "Enable CAPI Operator and make this a Cluster Generator"
+                type: boolean
+                default: false
+                true_value: enabled
+                false_value: disabled
+                editable: true
+                path: "metadata.labels.'sveltos.argus.rpcu.io/capi-management'"
+              capoversion:
+                label: "CAPO Version"
+                description: "OpenStack provider (CAPO) version when this is a management cluster; 'default' keeps the repo-pinned version"
+                type: select
+                options:
+                  - value: "default"
+                    label: "Default (repo-pinned)"
+                  - value: "v0.10.5"
+                    label: "v0.10.5"
+                  - value: "v0.11.3"
+                    label: "v0.11.3"
+                  - value: "v0.14.4"
+                    label: "v0.14.4"
+                default: "default"
+                editable: true
+                path: "metadata.annotations.'sveltos.argus.rpcu.io/capo-version'"
+                visible_groups:
+                  - kube-admin
+              vault:
+                label: "Vault Secret Integration"
+                description: "Enable Vault Secret store"
+                type: boolean
+                default: false
+                true_value: enabled
+                false_value: disabled
+                editable: true
+                path: "metadata.labels.'sveltos.argus.rpcu.io/vault-auth'"
+              certmanager:
+                label: "Cert-Manager Vault Issuer"
+                description: "Enable cert-manager + a vault-issuer ClusterIssuer backed by the shared mgmt Vault PKI"
+                type: boolean
+                default: false
+                true_value: enabled
+                false_value: disabled
+                editable: true
+                path: "metadata.labels.'sveltos.argus.rpcu.io/cert-manager'"
+              externaldns:
+                label: "External DNS"
+                description: "Enable InternalDNS addon via Sveltos"
+                type: boolean
+                default: false
+                true_value: enabled
+                false_value: disabled
+                editable: true
+                path: "metadata.labels.'sveltos.argus.rpcu.io/external-dns'"
+              gatewayapi:
+                label: "Gateway API"
+                description: "Enable Gateway API and kgateway addon via Sveltos"
+                type: boolean
+                default: false
+                true_value: enabled
+                false_value: disabled
+                editable: true
+                path: "metadata.labels.'sveltos.argus.rpcu.io/gateway-api'"
+              csidrivernfs:
+                label: "CephFS NFS (RWX)"
+                description: "Enable CephFS NFS CSI driver for ReadWriteMany volumes"
+                type: boolean
+                default: false
+                true_value: enabled
+                false_value: disabled
+                editable: true
+                path: "metadata.labels.'sveltos.argus.rpcu.io/csi-driver-nfs'"
+              dragonfly:
+                label: "Dragonfly (Redis)"
+                description: "Enable the DragonflyDB (Redis-compatible) operator via Sveltos"
+                type: boolean
+                default: false
+                true_value: enabled
+                false_value: disabled
+                editable: true
+                path: "metadata.labels.'sveltos.argus.rpcu.io/dragonfly'"
+              monitoring:
+                label: "Monitoring"
+                description: "Enable kube-prometheus-stack via Sveltos"
+                type: boolean
+                default: false
+                true_value: enabled
+                false_value: disabled
+                editable: true
+                path: "metadata.labels.'sveltos.argus.rpcu.io/monitoring'"
+              gatewayname:
+                label: "Gateway Name"
+                description: "Which Gateway to attach the tenant API server TLSRoute to"
+                type: select
+                options:
+                  - value: "https"
+                    label: "https (internal — *.kcp.<cluster>.rpcu.lan)"
+                  - value: "https-external"
+                    label: "https-external (public — *.kcp.<cluster>.rpcu.io)"
+                default: "https"
+              gatewayhostname:
+                label: "API Gateway Hostname"
+                description: "FQDN for the tenant API server TLSRoute"
+                type: select
+                options:
+                  - value: "{{ chihiro.name }}.kcp.production.rpcu.lan"
+                    label: "<cluster>.kcp.production.rpcu.lan (internal)"
+                    constrain:
+                      gatewayname: ["https"]
+                  - value: "{{ chihiro.name }}.kcp.rpcu.io"
+                    label: "<cluster>.kcp.rpcu.io (public)"
+                    constrain:
+                      gatewayname: ["https-external"]
+                default: "{{ chihiro.name }}.kcp.production.rpcu.lan"
+    env:
+      - key: CHIHIRO_HOST
+        value: '0.0.0.0'
+      - key: CHIHIRO_PORT
+        value: '8080'
+      - key: CHIHIRO_DOCS_URL
+        value: 'https://docs.rpcu.io/'
+      - key: CHIHIRO_OIDC_ISSUER_URL
+        value: 'https://rpcu-gabeck.eu1.zitadel.cloud'
+      - key: CHIHIRO_SESSION_TTL
+        value: '7200'
+      - key: CHIHIRO_REDIS_ADDR
+        value: 'localhost:6379'
+      - key: CHIHIRO_CLUSTER_DOMAIN
+        value: 'mgmt.rpcu.lan'
+      - key: CHIHIRO_CLUSTER_PORT
+        value: '443'
+      - key: CHIHIRO_ADMIN_GROUPS
+        value: 'kube-admin'
+      - key: CHIHIRO_CREATOR_GROUPS
+        value: 'kube-admin'
+      - key: CHIHIRO_AVAILABLE_VERSIONS
+        value: 'v1.36.1,v1.35.4'
+      - key: CHIHIRO_MAX_CLUSTERS
+        value: '5'
+      - key: CHIHIRO_MAX_TOTAL_NODES
+        value: '10'
+      - key: CHIHIRO_MAX_TOTAL_CP
+        value: '9'
+  endpoints:
+    http:
+      type: HTTP
+      port: 8080
+      visibility:
+        - external
