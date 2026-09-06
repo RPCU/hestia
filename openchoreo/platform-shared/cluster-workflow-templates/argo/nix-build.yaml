@@ -12,6 +12,13 @@
 # temp tar, then use skopeo to re-tag the archive to the name OpenChoreo's
 # publish-image step expects. skopeo works on docker-archive files directly, so
 # no container daemon / privileged Podman is needed here.
+#
+# Build speed: a persistent RWX PVC (ceph-cephfs) is mounted at /nix-cache
+# and used as a Nix `file://` binary cache — nix-build pulls prebuilt store
+# paths from it (substituter) and pushes the result closure back afterwards
+# (`nix copy`). This is far faster than seeding /nix/store directly, which
+# both shadowed the image's store and never actually persisted newly-built
+# paths (the store DB lives on the ephemeral rootfs, not the PVC).
 apiVersion: argoproj.io/v1alpha1
 kind: ClusterWorkflowTemplate
 metadata:
@@ -31,28 +38,6 @@ spec:
           # Extra `--argstr key value` pairs passed to nix-build, as a JSON array
           # of {name,value} objects (e.g. dockerVersion). Optional.
           - name: nix-args
-      initContainers:
-        - name: populate-nix-store
-          image: nixos/nix:2.24.9
-          command:
-            - sh
-            - -c
-          args:
-            - |-
-              set -e
-              CACHE="/mnt/nix-store-cache"
-              MARKER="$CACHE/.populated"
-              if [ -f "$MARKER" ]; then
-                echo ">> Nix store cache already populated ($(du -sh "$CACHE" | cut -f1)), skipping"
-                exit 0
-              fi
-              echo ">> Populating Nix store cache from image (848MB)..."
-              cp -a /nix/store/* "$CACHE/"
-              touch "$MARKER"
-              echo ">> Nix store cache populated ($(du -sh "$CACHE" | cut -f1))"
-          volumeMounts:
-            - mountPath: /mnt/nix-store-cache
-              name: nix-store-cache
       container:
         image: nixos/nix:2.24.9
         env:
@@ -73,11 +58,36 @@ spec:
           - |-
             set -e
 
-            # Nix needs its experimental flake/command config off (we use classic
-            # nix-build) but does need network access to fetch the nixpkgs channel.
-            export NIX_CONFIG="experimental-features ="
+            # Persistent Nix binary cache on the shared RWX PVC (ceph-cephfs).
+            # We do NOT mount the PVC at /nix/store — that would (a) shadow the
+            # image's own store and (b) not actually persist newly-built paths,
+            # since the store DB lives on the ephemeral rootfs at /nix/var. Using
+            # the PVC as a `file://` binary cache is the idiomatic, fast approach:
+            # nix-build pulls prebuilt paths from it (substituter) and we push the
+            # result closure back after the build (`nix copy`). NAR files are large
+            # sequential writes — far friendlier to NFS than millions of tiny
+            # per-file cp syscalls.
+            CACHE_DIR="/nix-cache"
+            # Uncompressed NARs: CPU-cheap and the store paths are already on a
+            # dedicated PVC, so we trade a little space for faster push/pull.
+            CACHE_URI="file://${CACHE_DIR}?compression=none"
+            mkdir -p "$CACHE_DIR"
+
+            # Write nix.conf rather than a multi-line NIX_CONFIG env var (keeps the
+            # YAML block scalar clean). The PVC cache is added as a trusted
+            # substituter so cache hits skip rebuilds; paths we push are unsigned
+            # (no signing key on a plain file:// cache) so require-sigs is off for
+            # this local, trusted cache. nix-command is enabled only so `nix copy`
+            # works — the build itself still uses classic nix-build. Network is
+            # still needed for the nixpkgs channel and uncached fixed-output derivs.
             mkdir -p /etc/nix
-            echo "sandbox = false" >> /etc/nix/nix.conf
+            {
+              echo "experimental-features = nix-command"
+              echo "sandbox = false"
+              echo "require-sigs = false"
+              echo "substituters = https://cache.nixos.org ${CACHE_URI}"
+              echo "trusted-substituters = ${CACHE_URI}"
+            } >> /etc/nix/nix.conf
 
             APP_DIR="/mnt/vol/source"
             [ "$APP_PATH" = "." ] || [ -z "$APP_PATH" ] || APP_DIR="/mnt/vol/source/${APP_PATH#/}"
@@ -127,11 +137,21 @@ spec:
             fi
 
             echo ">> Building OCI image with Nix"
+            # nix-build reads the PVC substituter from NIX_CONFIG above, so any
+            # store path already in the cache is fetched instead of rebuilt.
             # streamLayeredImage: nix-build yields a path to a script that streams
             # the image tar to stdout. buildLayeredImage would yield the tar path
             # directly; handle both.
             OUT=$(nix-build "$NIX_FILE" --no-out-link "$@")
             echo ">> nix-build output: $OUT"
+
+            # Push the full build closure to the PVC binary cache for next time.
+            # nix copy is parallel and idempotent — it only transfers paths the
+            # cache is missing, so warm runs are a fast no-op. Backgrounded so it
+            # never blocks image assembly; we wait for it before the step exits.
+            echo ">> Pushing build closure to persistent cache"
+            nix copy --to "$CACHE_URI" "$OUT" &
+            CACHE_PUSH_PID=$!
 
             RAW_TAR="/mnt/vol/nix-image.tar"
             if [ -x "$OUT" ] || head -c2 "$OUT" 2>/dev/null | grep -q '#!'; then
@@ -149,9 +169,16 @@ spec:
               "skopeo copy --insecure-policy docker-archive:${RAW_TAR} docker-archive:/mnt/vol/app-image.tar:${IMAGE}"
 
             rm -f "$RAW_TAR"
+
+            # Ensure the cache push finished before the pod (and its PVC mount)
+            # goes away; a failed push must not fail the build (cache is an
+            # optimisation, not a correctness dependency).
+            echo ">> Waiting for cache push to finish"
+            wait "$CACHE_PUSH_PID" || echo ">> Warning: cache push failed, continuing"
+
             echo ">> Image built successfully: /mnt/vol/app-image.tar ($IMAGE)"
         volumeMounts:
           - mountPath: /mnt/vol
             name: workspace
-          - mountPath: /nix/store
+          - mountPath: /nix-cache
             name: nix-store-cache
