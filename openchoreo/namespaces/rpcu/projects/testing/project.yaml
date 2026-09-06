@@ -46,21 +46,3 @@ spec:
   owner:
     projectName: testing
   environment: production
----
-apiVersion: openchoreo.dev/v1alpha1
-kind: ReleaseBinding
-metadata:
-  labels:
-    openchoreo.dev/name: chihiro-development
-  name: chihiro-development
-  namespace: rpcu
-spec:
-  owner:
-    projectName: testing
-    componentName: chihiro
-  environment: development
-  workloadOverrides:
-    container:
-      env:
-        - key: CHIHIRO_DEVMODE
-          value: "true"
