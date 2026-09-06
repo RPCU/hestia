@@ -1,16 +1,28 @@
 # Persistent, shared Nix store cache for the nix-builder build pipeline.
 #
-# The nix-build ClusterWorkflowTemplate mounts this PVC at /nix/store so
-# fetched/built derivations survive across workflow runs (nixpkgs, deps,
-# etc.), making rebuilds fast. It is RWX (ceph-cephfs) so concurrent
+# The nix-build ClusterWorkflowTemplate mounts the PVC below at /nix/store
+# so fetched/built derivations survive across workflow runs (nixpkgs,
+# deps, etc.), making rebuilds fast. It is RWX (ceph-cephfs) so concurrent
 # build pods can share it; an init container seeds it from the image's
 # pre-populated store on first use (guarded by a .populated marker).
 #
-# Lives in workflows-rpcu — the namespace OpenChoreo runs the rpcu
-# tenant's Argo build workflows in (the per-run `workspace` PVCs land
-# here too). The namespace is created ad-hoc by the workflow controller;
-# this PVC is intentionally decoupled from any single WorkflowRun so it
-# is never garbage-collected with a run's ttlAfterCompletion.
+# workflows-<tenant> is the namespace OpenChoreo's WorkflowRun controller
+# runs a tenant's Argo build workflows in (the per-run `workspace` PVCs
+# land here too). The controller creates it lazily on the first build via
+# create-or-ignore (`ensureResource`) and NEVER deletes it — it has no
+# `delete` verb on namespaces and its finalizer only reaps per-run
+# resources. We declare it here too so:
+#   * a cold-bootstrap PVC apply doesn't fail with "namespace not found"
+#     before the first build has ever run, and
+#   * the cache PVC has a stable home decoupled from any single
+#     WorkflowRun's ttlAfterCompletion.
+# Applying an identical bare Namespace is a no-op against the controller's
+# create-or-ignore, so this does not fight OpenChoreo.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: workflows-rpcu
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
