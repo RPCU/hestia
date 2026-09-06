@@ -73,7 +73,6 @@ spec:
         version: v1
         kind: Deployment
       targetPlane: dataplane
-      includeWhen: ${environmentConfigs.enabled}
       operations:
         - op: add
           path: /spec/template/spec/containers/-
