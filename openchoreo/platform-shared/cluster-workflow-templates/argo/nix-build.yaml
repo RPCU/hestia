@@ -31,6 +31,28 @@ spec:
           # Extra `--argstr key value` pairs passed to nix-build, as a JSON array
           # of {name,value} objects (e.g. dockerVersion). Optional.
           - name: nix-args
+      initContainers:
+        - name: populate-nix-store
+          image: nixos/nix:2.24.9
+          command:
+            - sh
+            - -c
+          args:
+            - |-
+              set -e
+              CACHE="/mnt/nix-store-cache"
+              MARKER="$CACHE/.populated"
+              if [ -f "$MARKER" ]; then
+                echo ">> Nix store cache already populated ($(du -sh "$CACHE" | cut -f1)), skipping"
+                exit 0
+              fi
+              echo ">> Populating Nix store cache from image (848MB)..."
+              cp -a /nix/store/* "$CACHE/"
+              touch "$MARKER"
+              echo ">> Nix store cache populated ($(du -sh "$CACHE" | cut -f1))"
+          volumeMounts:
+            - mountPath: /mnt/nix-store-cache
+              name: nix-store-cache
       container:
         image: nixos/nix:2.24.9
         env:
