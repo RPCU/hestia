@@ -185,6 +185,10 @@ spec:
             resources:
               requests:
                 storage: 4Gi
+      volumes:
+        - name: nix-store-cache
+          persistentVolumeClaim:
+            claimName: nix-store-cache
   externalRefs:
     - id: git-secret-reference
       apiVersion: openchoreo.dev/v1alpha1

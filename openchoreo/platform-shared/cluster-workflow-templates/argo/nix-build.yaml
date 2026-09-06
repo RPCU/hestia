@@ -131,3 +131,5 @@ spec:
         volumeMounts:
           - mountPath: /mnt/vol
             name: workspace
+          - mountPath: /nix/store
+            name: nix-store-cache
