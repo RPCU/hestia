@@ -148,6 +148,8 @@ spec:
                   parameters:
                     - name: git-revision
                       value: '{{steps.checkout-source.outputs.parameters.git-revision}}'
+                    - name: git-tag
+                      value: '{{steps.checkout-source.outputs.parameters.git-tag}}'
                     - name: build-env
                       value: '{{workflow.parameters.build-env}}'
                     - name: nix-file

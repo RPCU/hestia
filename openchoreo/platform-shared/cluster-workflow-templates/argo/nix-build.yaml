@@ -29,6 +29,11 @@ spec:
       inputs:
         parameters:
           - name: git-revision
+          # The git tag on the built commit (e.g. v1.2.3), or empty. Injected,
+          # together with git-revision, as `--argstr dockerVersion`/`commit`
+          # so the app can report its own version/commit (chihiro's nix/oci.nix
+          # threads these into the Go ldflags cmd.Version / cmd.Commit).
+          - name: git-tag
           # Accepted for interface-compatibility with the other builders; Nix
           # builds are hermetic, so build-env is not injected into the build.
           - name: build-env
@@ -45,6 +50,8 @@ spec:
             value: '{{workflow.parameters.image-name}}'
           - name: GIT_REVISION
             value: '{{inputs.parameters.git-revision}}'
+          - name: GIT_TAG
+            value: '{{inputs.parameters.git-tag}}'
           - name: APP_PATH
             value: '{{workflow.parameters.app-path}}'
           - name: NIX_FILE
@@ -135,6 +142,17 @@ spec:
               done
               IFS=$OLDIFS
             fi
+
+            # Inject the build's version/commit into the Nix expression so the
+            # built binary can report them (chihiro's nix/oci.nix threads
+            # dockerVersion -> cmd.Version and commit -> cmd.Commit via ldflags).
+            # dockerVersion is the git tag when the commit is tagged (e.g.
+            # v1.2.3), otherwise the short commit SHA — mirroring the OCI tag the
+            # publish-image step picks. Appended last so they take precedence
+            # over any dockerVersion/commit a caller passed in nix.args.
+            VERSION="${GIT_TAG:-$GIT_REVISION}"
+            set -- "$@" --argstr dockerVersion "$VERSION" --argstr commit "$GIT_REVISION"
+            echo ">> Injecting dockerVersion=$VERSION commit=$GIT_REVISION"
 
             echo ">> Building OCI image with Nix"
             # nix-build reads the PVC substituter from NIX_CONFIG above, so any
