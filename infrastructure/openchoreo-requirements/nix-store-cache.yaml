@@ -1,0 +1,25 @@
+# Persistent, shared Nix store cache for the nix-builder build pipeline.
+#
+# The nix-build ClusterWorkflowTemplate mounts this PVC at /nix/store so
+# fetched/built derivations survive across workflow runs (nixpkgs, deps,
+# etc.), making rebuilds fast. It is RWX (ceph-cephfs) so concurrent
+# build pods can share it; an init container seeds it from the image's
+# pre-populated store on first use (guarded by a .populated marker).
+#
+# Lives in workflows-rpcu — the namespace OpenChoreo runs the rpcu
+# tenant's Argo build workflows in (the per-run `workspace` PVCs land
+# here too). The namespace is created ad-hoc by the workflow controller;
+# this PVC is intentionally decoupled from any single WorkflowRun so it
+# is never garbage-collected with a run's ttlAfterCompletion.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nix-store-cache
+  namespace: workflows-rpcu
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: ceph-cephfs
+  resources:
+    requests:
+      storage: 20Gi
