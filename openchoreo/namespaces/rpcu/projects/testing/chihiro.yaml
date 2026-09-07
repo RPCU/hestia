@@ -24,6 +24,8 @@ spec:
         appPath: .
         revision:
           branch: main
+      versionArgName: dockerVersion
+      revisionArgName: commit
   traits:
     - kind: Trait
       name: dragonfly

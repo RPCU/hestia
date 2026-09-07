@@ -90,6 +90,14 @@ spec:
           type: string
           default: ""
           description: "Image name segment pushed as <registry>/<imageName>. Defaults to the component name when empty."
+        versionArgName:
+          type: string
+          default: ""
+          description: "When set, injects --argstr <name> <version> into the Nix build (git tag or short SHA). Optional."
+        revisionArgName:
+          type: string
+          default: ""
+          description: "When set, injects --argstr <name> <git-revision> into the Nix build. Optional."
   runTemplate:
     apiVersion: argoproj.io/v1alpha1
     kind: Workflow
@@ -129,6 +137,10 @@ spec:
             value: ${metadata.workflowRunName}-registry-push-secret
           - name: workload-publisher-secret
             value: ${metadata.workflowRunName}-workload-publisher-secret
+          - name: version-arg-name
+            value: ${parameters.versionArgName}
+          - name: revision-arg-name
+            value: ${parameters.revisionArgName}
       serviceAccountName: workflow-sa
       entrypoint: build-workflow
       templates:
@@ -156,6 +168,10 @@ spec:
                       value: '{{workflow.parameters.nix-file}}'
                     - name: nix-args
                       value: '{{workflow.parameters.nix-args}}'
+                    - name: version-arg-name
+                      value: '{{workflow.parameters.version-arg-name}}'
+                    - name: revision-arg-name
+                      value: '{{workflow.parameters.revision-arg-name}}'
             - - name: publish-image
                 templateRef:
                   name: publish-image

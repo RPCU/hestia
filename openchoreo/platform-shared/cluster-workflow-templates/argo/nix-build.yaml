@@ -29,10 +29,10 @@ spec:
       inputs:
         parameters:
           - name: git-revision
-          # The git tag on the built commit (e.g. v1.2.3), or empty. Injected,
-          # together with git-revision, as `--argstr dockerVersion`/`commit`
-          # so the app can report its own version/commit (chihiro's nix/oci.nix
-          # threads these into the Go ldflags cmd.Version / cmd.Commit).
+          # The git tag on the built commit (e.g. v1.2.3), or empty. When
+          # version-arg-name is set, injected as --argstr <name> so the Nix
+          # expression can use it (e.g. for ldflags). Appended last so they
+          # take precedence over any same-named key in nix-args.
           - name: git-tag
           # Accepted for interface-compatibility with the other builders; Nix
           # builds are hermetic, so build-env is not injected into the build.
@@ -41,8 +41,17 @@ spec:
           # streamLayeredImage / buildLayeredImage derivation.
           - name: nix-file
           # Extra `--argstr key value` pairs passed to nix-build, as a JSON array
-          # of {name,value} objects (e.g. dockerVersion). Optional.
+          # of {name,value} objects. Optional.
           - name: nix-args
+          # When set, injects --argstr <version-arg-name> <version> into the
+          # Nix build. The version is the git tag when the commit is tagged
+          # (e.g. v1.2.3), otherwise the short commit SHA. Ignored when empty.
+          - name: version-arg-name
+            default: ""
+          # When set, injects --argstr <revision-arg-name> <git-revision> into
+          # the Nix build. Ignored when empty.
+          - name: revision-arg-name
+            default: ""
       container:
         image: nixos/nix:2.24.9
         env:
@@ -58,6 +67,10 @@ spec:
             value: '{{inputs.parameters.nix-file}}'
           - name: NIX_ARGS_JSON
             value: '{{inputs.parameters.nix-args}}'
+          - name: VERSION_ARG_NAME
+            value: '{{inputs.parameters.version-arg-name}}'
+          - name: REVISION_ARG_NAME
+            value: '{{inputs.parameters.revision-arg-name}}'
         command:
           - sh
           - -c
@@ -143,16 +156,18 @@ spec:
               IFS=$OLDIFS
             fi
 
-            # Inject the build's version/commit into the Nix expression so the
-            # built binary can report them (chihiro's nix/oci.nix threads
-            # dockerVersion -> cmd.Version and commit -> cmd.Commit via ldflags).
-            # dockerVersion is the git tag when the commit is tagged (e.g.
-            # v1.2.3), otherwise the short commit SHA — mirroring the OCI tag the
-            # publish-image step picks. Appended last so they take precedence
-            # over any dockerVersion/commit a caller passed in nix.args.
-            VERSION="${GIT_TAG:-$GIT_REVISION}"
-            set -- "$@" --argstr dockerVersion "$VERSION" --argstr commit "$GIT_REVISION"
-            echo ">> Injecting dockerVersion=$VERSION commit=$GIT_REVISION"
+            # Optionally inject build metadata as --argstr flags so the Nix
+            # expression can use them (e.g. for ldflags). Only injected when
+            # the caller provides a non-empty arg name; skipped otherwise.
+            if [ -n "$VERSION_ARG_NAME" ]; then
+              VERSION="${GIT_TAG:-$GIT_REVISION}"
+              set -- "$@" --argstr "$VERSION_ARG_NAME" "$VERSION"
+              echo ">> Injecting $VERSION_ARG_NAME=$VERSION"
+            fi
+            if [ -n "$REVISION_ARG_NAME" ]; then
+              set -- "$@" --argstr "$REVISION_ARG_NAME" "$GIT_REVISION"
+              echo ">> Injecting $REVISION_ARG_NAME=$GIT_REVISION"
+            fi
 
             echo ">> Building OCI image with Nix"
             # nix-build reads the PVC substituter from NIX_CONFIG above, so any
