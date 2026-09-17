@@ -64,6 +64,7 @@ spec:
               memory: 2Gi
         data:
           replicas: 2
+          diskSize: 20Gi
           resources:
             requests:
               memory: 1Gi
@@ -71,6 +72,9 @@ spec:
               memory: 2Gi
     openSearchSetup:
       openSearchSecretName: opensearch-admin-credentials
+      dataRetentionTime:
+        containerLogs: "14d"
+        k8sEvents: "14d"
     adapter:
       openSearchSecretName: opensearch-admin-credentials
     # Collector runs on the remote data planes, not on the central plane.
@@ -118,6 +122,18 @@ spec:
             memory: 64Mi
           limits:
             memory: 256Mi
+      prometheus:
+        prometheusSpec:
+          retention: 14d
+          retentionSize: "18GB"
+          storageSpec:
+            volumeClaimTemplate:
+              spec:
+                storageClassName: csi-cinder-sc-delete
+                accessModes: ["ReadWriteOnce"]
+                resources:
+                  requests:
+                    storage: 20Gi
 ---
 # Traces module: reuses the OpenSearch instance from the logs module
 # (openSearch.enabled=false), plus the tracing adapter.
@@ -154,6 +170,8 @@ spec:
       enabled: false
     openSearchSetup:
       openSearchSecretName: opensearch-admin-credentials
+      dataRetentionTime:
+        traces: "14d"
     opentelemetryCollectorCustomizations:
       http:
         hostnames:
