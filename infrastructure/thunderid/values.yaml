@@ -434,7 +434,7 @@ bootstrap:
       logoUrl: "https://cdn.statically.io/gh/openchoreo/openchoreo.github.io@main/static/img/openchoreo-logo.png"
       allowedUserTypes:
         - "openchoreo-user"
-      authFlowId: "01900000-0000-7000-8000-000000000061"
+      authFlowId: "019a0000-0000-7000-8000-000000000021"
       inboundAuthConfig:
         - type: "oauth2"
           config:
