@@ -54,9 +54,12 @@ spec:
       # PVCs, indices lost).
       #
       # One data node: the platform idles at ~0.75 cores and the second data node
-      # only held replica copies. Indices must run number_of_replicas: 0 before
-      # scaling down (the operator drains the node and a replica can't move onto
-      # the node holding its primary) and to keep health green afterwards.
+      # only held replica copies. Every index uses auto_expand_replicas (0-1,
+      # 0-2, 0-20, 0-all), so replicas shrink to 0 by themselves as the operator
+      # drains the node; cluster.default_number_of_replicas is 0 (set live) for
+      # indices created without it. Don't add a `*` index template: the
+      # otel-traces/container-logs/k8s-events templates are composable at
+      # priority 0, so it would clash with or override their mappings.
       #
       # The chart's default limits (master 900Mi, data 1Gi) are too tight for
       # OpenSearch 3.3 (~25 bundled plugins): auto heap ≈ 50% of the container +
