@@ -212,7 +212,8 @@ wss://cluster-gateway.platform.rpcu.lan/ws` — the agent uses the external
     `openSearchCluster.enabled: true`. **master `replicas: 3`** — the operator
     seeds a temporary bootstrap node then deletes it; with a single master the
     voting-config handover loses quorum → `cluster_manager_not_discovered`
-    deadlock. Data `replicas: 2`. Memory 1Gi req / **2Gi limit** on both pools:
+    deadlock. Data `replicas: 1` (indices at `number_of_replicas: 0`). Memory
+    1Gi req / **2Gi limit** on both pools:
     the chart defaults (900Mi/1Gi) OOMKill OpenSearch 3.3 (~25 bundled plugins;
     auto heap ≈50% of the container + Netty direct buffers + Lucene mmap).
     `fluent-bit: enabled: false` (collectors live on the remote data planes).
@@ -680,9 +681,13 @@ their next render.
 - **2Gi memory limits, not the chart's 900Mi/1Gi.** OpenSearch 3.3 ships ~25
   plugins; auto heap ≈50% of the container plus off-heap (Netty direct buffers,
   Lucene mmap, thread stacks) overflows the default → OOMKilled (137) crashloop.
-- The in-file comment says "Keep a single data node to stay light (yellow
-  health)" while `data.replicas: 2`. The comment is stale; the value is what
-  runs.
+- **One data node** (was 2 until 2026-09-28; the platform idles at ~0.75 cores).
+  Indices run `number_of_replicas: 0`: set it on existing indices plus a
+  low-priority `*` index template BEFORE lowering `data.replicas`, because the
+  operator drains the removed node and a replica can't move onto the node that
+  holds its primary. The masters can't follow: voting config only auto-shrinks
+  while >= 3 masters remain, and a lone master deadlocks the bootstrap (above).
+  A single-node cluster needs a fresh cluster (indices lost).
 - `observability-metrics-prometheus` caps prometheus-operator at 60Mi by default
   and OOMs; the override to 64Mi/256Mi is required.
 
@@ -800,7 +805,8 @@ onto a cluster whose infrastructure is owned by argus.
 
 ---
 
-**Last Updated**: September 2026 — Initial AGENTS.md. Documents the full
+**Last Updated**: 2026-09-28 — OpenSearch data pool 2 → 1 (replicas 0), see
+"OpenSearch sizing". — Prior: September 2026 — Initial AGENTS.md. Documents the full
 `infrastructure/` reconciliation chain (fluxcd self-management → cnpg →
 openchoreo-requirements → thunderid → control/workflow/observability planes →
 opensearch-operator → observability modules → openchoreo-resources) and the
