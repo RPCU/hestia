@@ -1,0 +1,72 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterWorkflowTemplate
+metadata:
+  name: wait-for-image
+spec:
+  templates:
+    # RPCU: for images built outside Argo (e.g. GitHub Actions). Waits until
+    # zot.rpcu.io/public/<image-name>:<tag> exists — same ref publish-image
+    # would have produced: the git tag when the commit is tagged, otherwise
+    # the 8-char commit SHA — and outputs it for generate-workload-cr. The
+    # `public` path allows anonymous pull, so no registry secret is needed.
+    - name: wait-for-image
+      inputs:
+        parameters:
+          - name: git-revision
+          - name: git-tag
+            default: ""
+          - name: timeout-seconds
+            default: "1200"
+      outputs:
+        parameters:
+          - name: image
+            valueFrom:
+              path: /tmp/image.txt
+      container:
+        image: ghcr.io/openchoreo/podman-runner:v1.2
+        env:
+          - name: GIT_REVISION
+            value: "{{inputs.parameters.git-revision}}"
+          - name: GIT_TAG
+            value: "{{inputs.parameters.git-tag}}"
+          - name: IMAGE_NAME
+            value: "{{workflow.parameters.image-name}}"
+          - name: TIMEOUT
+            value: "{{inputs.parameters.timeout-seconds}}"
+        command:
+          - sh
+          - -c
+        args:
+          - |-
+            set -e
+
+            REGISTRY="zot.rpcu.io"
+            REPO="public/${IMAGE_NAME}"
+            if [ -n "$GIT_TAG" ]; then
+              IMAGE_TAG="$GIT_TAG"
+            else
+              IMAGE_TAG="$GIT_REVISION"
+            fi
+            TARGET_IMAGE="${REGISTRY}/${REPO}:${IMAGE_TAG}"
+            ACCEPT="application/vnd.oci.image.index.v1+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.docker.distribution.manifest.v2+json"
+
+            echo ">> Waiting up to ${TIMEOUT}s for ${TARGET_IMAGE}"
+            START=$(date +%s)
+            while :; do
+              CODE=$(curl -s -o /dev/null -w "%{http_code}" -I -H "Accept: ${ACCEPT}" \
+                "https://${REGISTRY}/v2/${REPO}/manifests/${IMAGE_TAG}" || echo "000")
+              if [ "$CODE" = "200" ]; then
+                break
+              fi
+              ELAPSED=$(( $(date +%s) - START ))
+              if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
+                echo ">> Error: ${TARGET_IMAGE} not found after ${ELAPSED}s (last HTTP ${CODE})"
+                echo ">> Hint: check the repository's image build (e.g. GitHub Actions) for this commit."
+                exit 1
+              fi
+              echo ">> Not there yet (HTTP ${CODE}, ${ELAPSED}s elapsed)"
+              sleep 10
+            done
+
+            echo ">> Image available: ${TARGET_IMAGE}"
+            echo -n "$TARGET_IMAGE" > /tmp/image.txt
