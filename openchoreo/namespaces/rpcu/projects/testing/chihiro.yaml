@@ -177,6 +177,9 @@ spec:
                     sveltos.argus.rpcu.io/capo-version: {{ chihiro.capoversion }}
                   labels:
                     sveltos.argus.rpcu.io/oidc-rbac: {{ chihiro.oidcrbac }}
+                    # OIDC guardrails (argus infrastructure/kyverno): on for every
+                    # cluster chihiro creates.
+                    sveltos.argus.rpcu.io/kyverno: "enabled"
                     sveltos.argus.rpcu.io/cilium: {{ chihiro.cilium }}
                     sveltos.argus.rpcu.io/openstack-integration: {{ chihiro.openstack }}
                     sveltos.argus.rpcu.io/capi-management: {{ chihiro.mgmt }}
@@ -544,6 +547,9 @@ spec:
                     sveltos.argus.rpcu.io/capo-version: {{ chihiro.capoversion }}
                   labels:
                     sveltos.argus.rpcu.io/oidc-rbac: {{ chihiro.oidcrbac }}
+                    # OIDC guardrails (argus infrastructure/kyverno): on for every
+                    # cluster chihiro creates.
+                    sveltos.argus.rpcu.io/kyverno: "enabled"
                     sveltos.argus.rpcu.io/cilium: {{ chihiro.cilium }}
                     sveltos.argus.rpcu.io/openstack-integration: {{ chihiro.openstack }}
                     sveltos.argus.rpcu.io/capi-management: {{ chihiro.mgmt }}
@@ -957,6 +963,9 @@ spec:
                     sveltos.argus.rpcu.io/capo-version: {{ chihiro.capoVersion }}
                   labels:
                     sveltos.argus.rpcu.io/oidc-rbac: {{ chihiro.oidcRbac }}
+                    # OIDC guardrails (argus infrastructure/kyverno): on for every
+                    # cluster chihiro creates.
+                    sveltos.argus.rpcu.io/kyverno: "enabled"
                     sveltos.argus.rpcu.io/cilium: {{ chihiro.cilium }}
                     sveltos.argus.rpcu.io/openstack-integration: {{ chihiro.openstack }}
                     sveltos.argus.rpcu.io/capi-management: {{ chihiro.mgmt }}
@@ -966,7 +975,6 @@ spec:
                     sveltos.argus.rpcu.io/gateway-api: {{ chihiro.gatewayApi }}
                     sveltos.argus.rpcu.io/csi-driver-nfs: {{ chihiro.csiDriverNfs }}
                     sveltos.argus.rpcu.io/dragonfly: {{ chihiro.dragonfly }}
-                    # sveltos.argus.rpcu.io/kyverno: "enabled"
                     sveltos.argus.rpcu.io/monitoring: {{ chihiro.monitoring }}
                     sveltos.argus.rpcu.io/openchoreo-data-plane: {{ chihiro.openchoreoDataPlane }}
                     sveltos.argus.rpcu.io/kamaji-apiserver-proxy: "enabled"
@@ -1410,6 +1418,9 @@ spec:
                     sveltos.argus.rpcu.io/capo-version: {{ chihiro.capoVersion }}
                   labels:
                     sveltos.argus.rpcu.io/oidc-rbac: {{ chihiro.oidcRbac }}
+                    # OIDC guardrails (argus infrastructure/kyverno): on for every
+                    # cluster chihiro creates.
+                    sveltos.argus.rpcu.io/kyverno: "enabled"
                     sveltos.argus.rpcu.io/cilium: {{ chihiro.cilium }}
                     sveltos.argus.rpcu.io/openstack-integration: {{ chihiro.openstack }}
                     sveltos.argus.rpcu.io/capi-management: {{ chihiro.mgmt }}
@@ -1419,7 +1430,6 @@ spec:
                     sveltos.argus.rpcu.io/gateway-api: {{ chihiro.gatewayApi }}
                     sveltos.argus.rpcu.io/csi-driver-nfs: {{ chihiro.csiDriverNfs }}
                     sveltos.argus.rpcu.io/dragonfly: {{ chihiro.dragonfly }}
-                    # sveltos.argus.rpcu.io/kyverno: "enabled"
                     sveltos.argus.rpcu.io/monitoring: {{ chihiro.monitoring }}
                     sveltos.argus.rpcu.io/openchoreo-data-plane: {{ chihiro.openchoreoDataPlane }}
                     sveltos.argus.rpcu.io/kamaji-apiserver-proxy: "enabled"

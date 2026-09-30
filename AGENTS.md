@@ -852,6 +852,10 @@ workflow-templates-gen`). Local edits are lost on the next regeneration — put
   matching Sveltos ClusterProfile in argus; each `parameters.*` entry drives a
   form field. `capoversion` and `imagename` are `select` fields on purpose —
   chihiro hard-errors on an empty `{{ chihiro.* }}` create-form placeholder.
+- `sveltos.argus.rpcu.io/kyverno: "enabled"` is hard-coded (no form field): every
+  cluster chihiro creates gets the OIDC guardrails from argus (guarded
+  `oidc-cluster-admin` + Kyverno, together with `oidc-rbac`). Clusters created
+  elsewhere get the label by hand.
 - `imagename` options carry `constrain: {version: [...]}` bindings to the
   Kubernetes versions in `CHIHIRO_AVAILABLE_VERSIONS` (`v1.36.1,v1.35.4`).
   Adding a version means updating both, plus the image names.
