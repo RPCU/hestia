@@ -292,6 +292,9 @@ standard`: development → staging → {production, public}.
     replicas, resources 15m/64Mi → 600m/750Mi). Shared by all replicas (the
     former Redis sidecar was per-pod). Needs the Dragonfly operator on the
     DataPlane cluster (mgmt, and argus's Sveltos `dragonfly` label elsewhere).
+    Also renders a NetworkPolicy admitting 6379 from the namespace and
+    6379/9999 from `dragonfly-operator-system`: the ProjectType's
+    `allow-kgateway-system-ingress` (podSelector {}) otherwise default-denies it.
   - **platform/traits/http-route.yaml** — namespaced `Trait/http-route`: an
     extra HTTPRoute with explicit `hostnames` on a chosen Gateway listener
     (`gatewayName`/`gatewayNamespace`/`sectionName`, backend

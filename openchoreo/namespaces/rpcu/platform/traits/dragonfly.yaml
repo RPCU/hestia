@@ -13,6 +13,12 @@
 # session-store: CHIHIRO_REDIS_ADDR=chihiro-session-store:6379.
 #
 # Requires the Dragonfly operator on the DataPlane's cluster.
+#
+# Also renders a NetworkPolicy for the Dragonfly pods: the project's
+# allow-kgateway-system-ingress policy selects every pod in the environment
+# namespace, which default-denies all other ingress. Without this the operator
+# cannot reach the admin port to elect a master (so the Service never gets an
+# endpoint) and the app cannot reach 6379.
 apiVersion: openchoreo.dev/v1alpha1
 kind: Trait
 metadata:
@@ -76,3 +82,35 @@ spec:
             limits:
               cpu: ${environmentConfigs.resources.limits.cpu}
               memory: ${environmentConfigs.resources.limits.memory}
+
+    - targetPlane: dataplane
+      template:
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        metadata:
+          name: ${metadata.componentName}-${trait.instanceName}
+          namespace: ${metadata.namespace}
+          labels: ${metadata.labels}
+        spec:
+          podSelector:
+            matchLabels:
+              app: ${metadata.componentName}-${trait.instanceName}
+          policyTypes:
+            - Ingress
+          ingress:
+            # Clients (the component) and replica-to-replica replication.
+            - from:
+                - podSelector: {}
+              ports:
+                - protocol: TCP
+                  port: 6379
+            # Dragonfly operator: health/role management on the admin port.
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      kubernetes.io/metadata.name: dragonfly-operator-system
+              ports:
+                - protocol: TCP
+                  port: 6379
+                - protocol: TCP
+                  port: 9999
