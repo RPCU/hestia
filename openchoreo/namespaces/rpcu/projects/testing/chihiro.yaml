@@ -13,6 +13,9 @@ spec:
   componentType:
     kind: ComponentType
     name: deployment/web-application
+  # Push to main -> GitHub webhook -> https://openchoreo.rpcu.io/api/v1alpha1/autobuild
+  # (atlas https-external, only that path) -> openchoreo-api -> WorkflowRun.
+  autoBuild: true
   workflow:
     kind: ClusterWorkflow
     name: nix-builder
@@ -21,7 +24,9 @@ spec:
         file: ./nix/oci.nix
       repository:
         url: https://github.com/RPCU/chihiro
-        appPath: .
+        # appPath left unset (schema default "."): the autobuild webhook
+        # compares it literally against GitHub's modified paths, and "."
+        # matches none of them, so every push would be skipped.
         revision:
           branch: main
       versionArgName: dockerVersion
