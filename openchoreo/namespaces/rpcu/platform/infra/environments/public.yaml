@@ -1,0 +1,14 @@
+apiVersion: openchoreo.dev/v1alpha1
+kind: Environment
+metadata:
+  name: public
+  annotations:
+    openchoreo.dev/display-name: Public
+    openchoreo.dev/description: Production workloads exposed on the internet (production cluster, *.rpcu.io)
+  labels:
+    openchoreo.dev/name: public
+spec:
+  dataPlaneRef:
+    kind: DataPlane
+    name: production
+  isProduction: true

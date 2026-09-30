@@ -27,9 +27,19 @@ spec:
       versionArgName: dockerVersion
       revisionArgName: commit
   traits:
+    # DragonflyDB instance shared by all replicas; Service
+    # chihiro-session-store:6379 (see CHIHIRO_REDIS_ADDR in the bindings).
     - kind: Trait
       name: dragonfly
       instanceName: session-store
+    # Stable hostname per environment (traitEnvironmentConfigs.hostname).
+    - kind: Trait
+      name: http-route
+      instanceName: hostname
+    # Fixed LoadBalancer address, mgmt only (traitEnvironmentConfigs.lb).
+    - kind: Trait
+      name: load-balancer
+      instanceName: lb
     - kind: Trait
       name: rbac
       instanceName: capi-viewer
@@ -61,6 +71,10 @@ spec:
             verbs: ['get', 'list', 'watch']
           - apiGroups: ['bootstrap.cluster.x-k8s.io']
             resources: ['*']
+            verbs: ['get', 'list', 'watch']
+          # Sveltos add-on status per cluster (CHIHIRO_SVELTOS_ENABLED).
+          - apiGroups: ['config.projectsveltos.io']
+            resources: ['clustersummaries']
             verbs: ['get', 'list', 'watch']
 ---
 apiVersion: openchoreo.dev/v1alpha1
@@ -165,6 +179,7 @@ spec:
                     sveltos.argus.rpcu.io/csi-driver-nfs: {{ chihiro.csidrivernfs }}
                     sveltos.argus.rpcu.io/dragonfly: {{ chihiro.dragonfly }}
                     sveltos.argus.rpcu.io/monitoring: {{ chihiro.monitoring }}
+                    sveltos.argus.rpcu.io/openchoreo-data-plane: {{ chihiro.openchoreodataplane }}
                     sveltos.argus.rpcu.io/kamaji-apiserver-proxy: "enabled"
                     dike.rpcu.io/enabled: "true"
                     type: workload
@@ -368,6 +383,17 @@ spec:
                   false_value: disabled
                   editable: true
                   path: "metadata.labels.'sveltos.argus.rpcu.io/monitoring'"
+                openchoreodataplane:
+                  label: "OpenChoreo Data Plane"
+                  description: "Run the OpenChoreo data-plane agent (Sveltos) so the cluster can be an OpenChoreo DataPlane (planeID = cluster name; needs a matching DataPlane CR in hestia). Requires Cert-Manager Vault Issuer."
+                  type: boolean
+                  default: false
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/openchoreo-data-plane'"
+                  visible_groups:
+                    - kube-admin
                 gatewayname:
                   label: "Gateway Name"
                   description: "Which Gateway to attach the tenant API server TLSRoute to"
@@ -398,7 +424,7 @@ spec:
         - key: CHIHIRO_SESSION_TTL
           value: '7200'
         - key: CHIHIRO_REDIS_ADDR
-          value: 'localhost:6379'
+          value: 'chihiro-session-store:6379'
         - key: CHIHIRO_CLUSTER_PORT
           value: '443'
         - key: CHIHIRO_ADMIN_GROUPS
@@ -413,6 +439,8 @@ spec:
           value: '10'
         - key: CHIHIRO_MAX_TOTAL_CP
           value: '9'
+        - key: CHIHIRO_SVELTOS_ENABLED
+          value: 'true'
         - key: CHIHIRO_DEVMODE
           value: 'true'
 ---
@@ -420,7 +448,7 @@ apiVersion: openchoreo.dev/v1alpha1
 kind: ReleaseBinding
 metadata:
   labels:
-    openchoreo.dev/name: chihiro-development
+    openchoreo.dev/name: chihiro-staging
   name: chihiro-staging
   namespace: rpcu
 spec:
@@ -518,6 +546,7 @@ spec:
                     sveltos.argus.rpcu.io/csi-driver-nfs: {{ chihiro.csidrivernfs }}
                     sveltos.argus.rpcu.io/dragonfly: {{ chihiro.dragonfly }}
                     sveltos.argus.rpcu.io/monitoring: {{ chihiro.monitoring }}
+                    sveltos.argus.rpcu.io/openchoreo-data-plane: {{ chihiro.openchoreodataplane }}
                     sveltos.argus.rpcu.io/kamaji-apiserver-proxy: "enabled"
                     dike.rpcu.io/enabled: "true"
                     type: workload
@@ -721,6 +750,17 @@ spec:
                   false_value: disabled
                   editable: true
                   path: "metadata.labels.'sveltos.argus.rpcu.io/monitoring'"
+                openchoreodataplane:
+                  label: "OpenChoreo Data Plane"
+                  description: "Run the OpenChoreo data-plane agent (Sveltos) so the cluster can be an OpenChoreo DataPlane (planeID = cluster name; needs a matching DataPlane CR in hestia). Requires Cert-Manager Vault Issuer."
+                  type: boolean
+                  default: false
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/openchoreo-data-plane'"
+                  visible_groups:
+                    - kube-admin
                 gatewayname:
                   label: "Gateway Name"
                   description: "Which Gateway to attach the tenant API server TLSRoute to"
@@ -767,7 +807,7 @@ spec:
         - key: CHIHIRO_SESSION_TTL
           value: '7200'
         - key: CHIHIRO_REDIS_ADDR
-          value: 'localhost:6379'
+          value: 'chihiro-session-store:6379'
         - key: CHIHIRO_CLUSTER_PORT
           value: '443'
         - key: CHIHIRO_ADMIN_GROUPS
@@ -782,5 +822,974 @@ spec:
           value: '10'
         - key: CHIHIRO_MAX_TOTAL_CP
           value: '9'
+        - key: CHIHIRO_SVELTOS_ENABLED
+          value: 'true'
         - key: CHIHIRO_DEVMODE
           value: 'false'
+---
+# Production: the chihiro that manages the CAPI clusters on mgmt, served
+# internally at chihiro.mgmt.rpcu.lan (+ the historical LB 172.16.255.11).
+# Replaces argus's clusters/mgmt/apps/chihiro deployment. Secrets come from
+# Vault secrets-mgmt/chihiro, pushed by argus from chihiro-system (Crossplane
+# Zitadel Oidc + session key).
+#
+# releaseName is set by promotion (staging -> production), not in git.
+apiVersion: openchoreo.dev/v1alpha1
+kind: ReleaseBinding
+metadata:
+  labels:
+    openchoreo.dev/name: chihiro-production
+  name: chihiro-production
+  namespace: rpcu
+spec:
+  owner:
+    projectName: testing
+    componentName: chihiro
+  environment: production
+  componentTypeEnvironmentConfigs:
+    replicas: 2
+  traitEnvironmentConfigs:
+    hostname:
+      enabled: true
+      hostnames: ['chihiro.mgmt.rpcu.lan']
+      gatewayName: https
+      sectionName: https
+    lb:
+      enabled: true
+      loadBalancerIP: '172.16.255.11'
+      annotations:
+        loadbalancer.openstack.org/load-balancer-address: '172.16.255.11'
+  workloadOverrides:
+    container:
+      files:
+        - key: config.yaml
+          mountPath: /
+          value: |
+            cluster:
+              injections:
+                name:
+                  path: metadata.name
+                version:
+                  path: spec.topology.version
+                  label: "Kubernetes Version"
+                  editable: true
+                serviceDomain:
+                  path: spec.clusterNetwork.serviceDomain
+                groups:
+                  label: "Access Groups"
+                  editable: true
+                workerGroups:
+                  path: spec.topology.workers.machineDeployments
+                  label: "Worker Groups"
+                  editable: true
+                controlPlaneReplicas:
+                  path: spec.topology.controlPlane.replicas
+                  label: "Control Plane Replicas"
+                  editable: true
+                  min: 1
+                  max: 9
+              # Per-worker-group form fields shown in the create/edit UI. Each entry
+              # only describes one input; where its value lands in the machineDeployment
+              # is decided by worker_group_template below.
+              worker_group_fields:
+                name:
+                  label: "Group name"
+                  type: string
+                  required: true
+                  order: 0
+                class:
+                  label: "Class"
+                  type: select
+                  options:
+                    - default-worker
+                  default: default-worker
+                  order: 1
+                flavor:
+                  label: "Flavor"
+                  type: select
+                  options:
+                    - medium
+                    - xmedium
+                    - large
+                    - mono-large
+                    - duo-large
+                    - xlarge
+                    - bis-xlarge
+                    - cis-xlarge
+                  default: xmedium
+                  order: 2
+                replicas:
+                  label: "Replicas"
+                  type: number
+                  default: "1"
+                  min: 0
+                  max: 10
+                  order: 3
+              # YAML template for ONE machineDeployment entry, rendered once per worker
+              # group and appended to spec.topology.workers.machineDeployments.
+              worker_group_template: |
+                name: {{ chihiro.field.name }}
+                class: {{ chihiro.field.class }}
+                replicas: {{ chihiro.field.replicas }}
+                variables:
+                  overrides:
+                    - name: workerFlavor
+                      value: {{ chihiro.field.flavor }}
+              template: |
+                apiVersion: cluster.x-k8s.io/v1beta2
+                kind: Cluster
+                metadata:
+                  namespace: mgmt
+                  # The capo-version annotation lets the management-cluster addon pin a
+                  # specific CAPO provider version. The sentinel "default" means "no
+                  # override" — the Sveltos capi-management ClusterProfile then leaves
+                  # the repo-pinned CAPO version in place. Any real version (e.g.
+                  # v0.14.4) overrides it.
+                  annotations:
+                    sveltos.argus.rpcu.io/capo-version: {{ chihiro.capoVersion }}
+                  labels:
+                    sveltos.argus.rpcu.io/oidc-rbac: {{ chihiro.oidcRbac }}
+                    sveltos.argus.rpcu.io/cilium: {{ chihiro.cilium }}
+                    sveltos.argus.rpcu.io/openstack-integration: {{ chihiro.openstack }}
+                    sveltos.argus.rpcu.io/capi-management: {{ chihiro.mgmt }}
+                    sveltos.argus.rpcu.io/vault-auth: {{ chihiro.vault }}
+                    sveltos.argus.rpcu.io/cert-manager: {{ chihiro.certManager }}
+                    sveltos.argus.rpcu.io/external-dns: {{ chihiro.externalDns }}
+                    sveltos.argus.rpcu.io/gateway-api: {{ chihiro.gatewayApi }}
+                    sveltos.argus.rpcu.io/csi-driver-nfs: {{ chihiro.csiDriverNfs }}
+                    sveltos.argus.rpcu.io/dragonfly: {{ chihiro.dragonfly }}
+                    # sveltos.argus.rpcu.io/kyverno: "enabled"
+                    sveltos.argus.rpcu.io/monitoring: {{ chihiro.monitoring }}
+                    sveltos.argus.rpcu.io/openchoreo-data-plane: {{ chihiro.openchoreoDataPlane }}
+                    sveltos.argus.rpcu.io/kamaji-apiserver-proxy: "enabled"
+                    dike.rpcu.io/enabled: "true"
+                    type: workload
+                spec:
+                  clusterNetwork:
+                    pods:
+                      cidrBlocks:
+                        - {{ chihiro.podCIDR }}
+                    serviceDomain: ignore
+                    services:
+                      cidrBlocks:
+                        - {{ chihiro.serviceCIDR }}
+                  topology:
+                    classRef:
+                      name: openstack-kamaji-external
+                    controlPlane:
+                      replicas: 0
+                    variables:
+                      - name: identityRef
+                        value:
+                          name: mgmt-cloud-config
+                          cloudName: {{ chihiro.cloudName }}
+                      - name: externalNetworkId
+                        value: 1cfd69da-057c-4748-a0d4-de5b0ca77db2
+                      - name: imageName
+                        value: {{ chihiro.imageName }}
+                      - name: oidc
+                        value:
+                          enabled: true
+                          issuerURL: https://rpcu-gabeck.eu1.zitadel.cloud
+                          clientID: "377050089077613929"
+                      - name: managedSubnetCIDR
+                        value: {{ chihiro.managedSubnetCIDR }}
+                      - name: gatewayHostname
+                        value: {{ chihiro.gatewayHostname }}
+                      - name: gatewayName
+                        value: {{ chihiro.gatewayName }}
+                      - name: externalKubeconfigSecretName
+                        value: production-kubeconfig
+                    version: "0.0.0"
+              parameters:
+                cloudName:
+                  label: "Openstack Project"
+                  description: "OpenStack cloud project to provision into"
+                  type: select
+                  options:
+                    - value: "openstack"
+                      label: "admin"
+                    - value: "lab"
+                      label: "lab"
+                    - value: "production"
+                      label: "production"
+                  default: lab
+                podCIDR:
+                  label: "Pod CIDR"
+                  description: "CIDR block for pod networking"
+                  type: string
+                  default: "10.207.0.0/16"
+                serviceCIDR:
+                  label: "Service CIDR"
+                  description: "CIDR block for service networking"
+                  type: string
+                  default: "10.107.0.0/16"
+                imageName:
+                  label: "Node Image"
+                  description: "OpenStack image for cluster nodes"
+                  type: select
+                  options:
+                    - value: "hephaestus-kaas-25.11-{{ chihiro.version }}"
+                      label: "25.11"
+                      constrain:
+                        version: ["v1.35.4"]
+                    - value: "hephaestus-kaas-2-26.05-{{ chihiro.version }}"
+                      label: "26.05-2"
+                      constrain:
+                        version: ["v1.36.1"]
+                  default: "hephaestus-kaas-26.05-{{ chihiro.version }}"
+                  editable: true
+                  path: "spec.topology.variables[2].value"
+                managedSubnetCIDR:
+                  label: "Managed Subnet CIDR"
+                  description: "CIDR block for the managed subnet"
+                  type: string
+                  default: "192.168.1.0/24"
+                # Boolean (checkbox) addon toggles. editable + path lets them be flipped
+                # after creation; the label key is single-quoted in the path because it
+                # contains dots.
+                cilium:
+                  label: "Cilium CNI"
+                  description: "Enable the Cilium addon via Sveltos"
+                  type: boolean
+                  default: true
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/cilium'"
+                oidcRbac:
+                  label: "OIDC RBAC"
+                  description: "Enable OIDC RBAC addon via Sveltos"
+                  type: boolean
+                  default: true
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/oidc-rbac'"
+                  visible_groups:
+                    - kube-admin
+                openstack:
+                  label: "Openstack Integration"
+                  description: "Enable Service Type LB using Octavia and CSI using Cinder"
+                  type: boolean
+                  default: false
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/openstack-integration'"
+                mgmt:
+                  label: "Management Cluster"
+                  description: "Enable CAPI Operator and make this a Cluster Generator"
+                  type: boolean
+                  default: false
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/capi-management'"
+                # CAPO (OpenStack infrastructure provider) version override for a cluster
+                # that is itself a management cluster (mgmt: enabled). The "default"
+                # sentinel means "leave the repo-pinned version" — the Sveltos
+                # capi-management ClusterProfile only patches the provider version when
+                # this is a real version string. Editable so it can be changed later.
+                capoVersion:
+                  label: "CAPO Version"
+                  description: "OpenStack provider (CAPO) version when this is a management cluster; 'default' keeps the repo-pinned version"
+                  type: select
+                  options:
+                    - value: "default"
+                      label: "Default (repo-pinned)"
+                    - value: "v0.10.5"
+                      label: "v0.10.5"
+                    - value: "v0.11.3"
+                      label: "v0.11.3"
+                    - value: "v0.14.4"
+                      label: "v0.14.4"
+                  default: "default"
+                  editable: true
+                  path: "metadata.annotations.'sveltos.argus.rpcu.io/capo-version'"
+                  visible_groups:
+                    - kube-admin
+                vault:
+                  label: "Vault Secret Integration"
+                  description: "Enable Vault Secret store"
+                  type: boolean
+                  default: false
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/vault-auth'"
+                certManager:
+                  label: "Cert-Manager Vault Issuer"
+                  description: "Enable cert-manager + a vault-issuer ClusterIssuer backed by the shared mgmt Vault PKI (subdomain-isolated to <cluster>.rpcu.lan). Prerequisite for Gateway API (its HTTPS listener needs the vault-issuer Certificate) — enable this whenever Gateway API is enabled."
+                  type: boolean
+                  default: false
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/cert-manager'"
+                externalDns:
+                  label: "External DNS"
+                  description: "Enable InternalDNS addon via Sveltos"
+                  type: boolean
+                  default: false
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/external-dns'"
+                gatewayApi:
+                  label: "Gateway API"
+                  description: "Enable Gateway API and kgateway addon via Sveltos. Requires Cert-Manager Vault Issuer (the Gateway HTTPS listener terminates TLS with a cert-manager Certificate signed by vault-issuer); gateway-api-resources dependsOn cert-manager."
+                  type: boolean
+                  default: false
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/gateway-api'"
+                csiDriverNfs:
+                  label: "CephFS NFS (RWX)"
+                  description: "Enable CephFS NFS CSI driver for ReadWriteMany volumes via the openstack Ceph cluster's NFS gateway"
+                  type: boolean
+                  default: false
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/csi-driver-nfs'"
+                dragonfly:
+                  label: "Dragonfly (Redis)"
+                  description: "Enable the DragonflyDB (Redis-compatible) operator via Sveltos so workload apps can provision Dragonfly instances"
+                  type: boolean
+                  default: false
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/dragonfly'"
+                monitoring:
+                  label: "Monitoring"
+                  description: "Enable kube-prometheus-stack via Sveltos, remote_writing metrics to the central Mimir on mgmt (https://mimir.mgmt.rpcu.lan)"
+                  type: boolean
+                  default: false
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/monitoring'"
+                openchoreoDataPlane:
+                  label: "OpenChoreo Data Plane"
+                  description: "Run the OpenChoreo data-plane agent (Sveltos) so the cluster can be an OpenChoreo DataPlane (planeID = cluster name; needs a matching DataPlane CR in hestia). Requires Cert-Manager Vault Issuer."
+                  type: boolean
+                  default: false
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/openchoreo-data-plane'"
+                  visible_groups:
+                    - kube-admin
+                # ── External Kamaji cluster options ──────────────────────────────────
+                # gatewayName selects which Gateway the tenant API server TLSRoute
+                # attaches to. gatewayHostname is a CONSTRAINED select: each option is
+                # tied (via `constrain`) to a gatewayName value, so picking the gateway
+                # auto-selects the matching domain (rpcu.lan for the internal gateway,
+                # rpcu.io for the public one).
+                #
+                # Both are CREATE-TIME ONLY (no `editable`/`path`) — deliberately:
+                #   1. The advertised API endpoint is baked into every issued kubeconfig,
+                #      the TLSRoute hostname and the apiserver cert SAN (certSANs patch).
+                #      Changing it on a live cluster breaks all three and needs a
+                #      control-plane roll, so it is not a safe post-creation edit.
+                #   2. gatewayHostname embeds {{ chihiro.name }}. The server-side
+                #      recompute token table is built only from the
+                #      chihiro.io/parameters annotation and never carries the cluster
+                #      name, so an edit would write the LITERAL "{{ chihiro.name }}..."
+                #      into spec.topology.variables[].value. Omitting `path` makes
+                #      recomputeDependents skip these entirely (it ignores params with
+                #      no path), so that leak cannot happen.
+                # Create-time selection is unaffected: injection goes through
+                # cluster.template ({{ chihiro.gatewayHostname }}), not `path`, and the
+                # create form resolves the name token client-side.
+                gatewayName:
+                  label: "Gateway Name"
+                  description: "Which Gateway to attach the tenant API server TLSRoute to. Selecting this auto-sets the API Gateway Hostname domain. Cannot be changed after creation."
+                  type: select
+                  options:
+                    - value: "https"
+                      label: "https (internal — *.kcp.<cluster>.rpcu.lan)"
+                    - value: "https-external"
+                      label: "https-external (public — *.kcp.<cluster>.rpcu.io)"
+                  default: "https"
+                gatewayHostname:
+                  label: "API Gateway Hostname"
+                  description: "FQDN for the tenant API server TLSRoute. Auto-selected from the Gateway Name: <cluster>.kcp.production.rpcu.lan for 'https', <cluster>.kcp.rpcu.io for 'https-external'. Cannot be changed after creation."
+                  type: select
+                  options:
+                    - value: "{{ chihiro.name }}.kcp.production.rpcu.lan"
+                      label: "<cluster>.kcp.production.rpcu.lan (internal)"
+                      constrain:
+                        gatewayName: ["https"]
+                    - value: "{{ chihiro.name }}.kcp.rpcu.io"
+                      label: "<cluster>.kcp.rpcu.io (public)"
+                      constrain:
+                        gatewayName: ["https-external"]
+                  default: "{{ chihiro.name }}.kcp.production.rpcu.lan"
+      env:
+        - key: CHIHIRO_HOST
+          value: '0.0.0.0'
+        - key: CHIHIRO_PORT
+          value: '8080'
+        - key: CHIHIRO_DOCS_URL
+          value: 'https://docs.rpcu.io/'
+        - key: CHIHIRO_OIDC_ISSUER_URL
+          value: 'https://rpcu-gabeck.eu1.zitadel.cloud'
+        # Vault secrets-mgmt/chihiro via SecretReference chihiro-production.
+        - key: CHIHIRO_OIDC_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: chihiro-production
+              key: clientId
+        - key: CHIHIRO_OIDC_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: chihiro-production
+              key: clientSecret
+        - key: CHIHIRO_SESSION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: chihiro-production
+              key: session_key
+        - key: CHIHIRO_SESSION_TTL
+          value: '7200'
+        - key: CHIHIRO_REDIS_ADDR
+          value: 'chihiro-session-store:6379'
+        - key: CHIHIRO_CLUSTER_DOMAIN
+          value: 'mgmt.rpcu.lan'
+        - key: CHIHIRO_CLUSTER_PORT
+          value: '443'
+        - key: CHIHIRO_ADMIN_GROUPS
+          value: 'kube-admin'
+        - key: CHIHIRO_CREATOR_GROUPS
+          value: 'kube-admin'
+        - key: CHIHIRO_AVAILABLE_VERSIONS
+          value: 'v1.36.1,v1.35.4'
+        - key: CHIHIRO_MAX_CLUSTERS
+          value: '5'
+        - key: CHIHIRO_MAX_TOTAL_NODES
+          value: '10'
+        - key: CHIHIRO_MAX_TOTAL_CP
+          value: '9'
+        - key: CHIHIRO_SVELTOS_ENABLED
+          value: 'true'
+        - key: CHIHIRO_DEVMODE
+          value: 'false'
+---
+# Public: a second chihiro on the production cluster, exposed on the internet at
+# chihiro.rpcu.io (https-external gateway). It manages the SAME CAPI clusters on
+# mgmt through a kubeconfig for the mgmt ServiceAccount chihiro-external
+# (created by argus, pushed to Vault secrets-production/chihiro with the OIDC
+# client + session key).
+#
+# releaseName is set by promotion (staging -> public), not in git.
+apiVersion: openchoreo.dev/v1alpha1
+kind: ReleaseBinding
+metadata:
+  labels:
+    openchoreo.dev/name: chihiro-public
+  name: chihiro-public
+  namespace: rpcu
+spec:
+  owner:
+    projectName: testing
+    componentName: chihiro
+  environment: public
+  componentTypeEnvironmentConfigs:
+    replicas: 2
+  traitEnvironmentConfigs:
+    hostname:
+      enabled: true
+      hostnames: ['chihiro.rpcu.io']
+      gatewayName: https-external
+      sectionName: https
+  workloadOverrides:
+    container:
+      files:
+        - key: kubeconfig
+          mountPath: /etc/chihiro
+          valueFrom:
+            secretKeyRef:
+              name: chihiro-public
+              key: kubeconfig
+        - key: config.yaml
+          mountPath: /
+          value: |
+            cluster:
+              injections:
+                name:
+                  path: metadata.name
+                version:
+                  path: spec.topology.version
+                  label: "Kubernetes Version"
+                  editable: true
+                serviceDomain:
+                  path: spec.clusterNetwork.serviceDomain
+                groups:
+                  label: "Access Groups"
+                  editable: true
+                workerGroups:
+                  path: spec.topology.workers.machineDeployments
+                  label: "Worker Groups"
+                  editable: true
+                controlPlaneReplicas:
+                  path: spec.topology.controlPlane.replicas
+                  label: "Control Plane Replicas"
+                  editable: true
+                  min: 1
+                  max: 9
+              # Per-worker-group form fields shown in the create/edit UI. Each entry
+              # only describes one input; where its value lands in the machineDeployment
+              # is decided by worker_group_template below.
+              worker_group_fields:
+                name:
+                  label: "Group name"
+                  type: string
+                  required: true
+                  order: 0
+                class:
+                  label: "Class"
+                  type: select
+                  options:
+                    - default-worker
+                  default: default-worker
+                  order: 1
+                flavor:
+                  label: "Flavor"
+                  type: select
+                  options:
+                    - medium
+                    - xmedium
+                    - large
+                    - mono-large
+                    - duo-large
+                    - xlarge
+                    - bis-xlarge
+                    - cis-xlarge
+                  default: xmedium
+                  order: 2
+                replicas:
+                  label: "Replicas"
+                  type: number
+                  default: "1"
+                  min: 0
+                  max: 10
+                  order: 3
+              # YAML template for ONE machineDeployment entry, rendered once per worker
+              # group and appended to spec.topology.workers.machineDeployments.
+              worker_group_template: |
+                name: {{ chihiro.field.name }}
+                class: {{ chihiro.field.class }}
+                replicas: {{ chihiro.field.replicas }}
+                variables:
+                  overrides:
+                    - name: workerFlavor
+                      value: {{ chihiro.field.flavor }}
+              template: |
+                apiVersion: cluster.x-k8s.io/v1beta2
+                kind: Cluster
+                metadata:
+                  namespace: mgmt
+                  # The capo-version annotation lets the management-cluster addon pin a
+                  # specific CAPO provider version. The sentinel "default" means "no
+                  # override" — the Sveltos capi-management ClusterProfile then leaves
+                  # the repo-pinned CAPO version in place. Any real version (e.g.
+                  # v0.14.4) overrides it.
+                  annotations:
+                    sveltos.argus.rpcu.io/capo-version: {{ chihiro.capoVersion }}
+                  labels:
+                    sveltos.argus.rpcu.io/oidc-rbac: {{ chihiro.oidcRbac }}
+                    sveltos.argus.rpcu.io/cilium: {{ chihiro.cilium }}
+                    sveltos.argus.rpcu.io/openstack-integration: {{ chihiro.openstack }}
+                    sveltos.argus.rpcu.io/capi-management: {{ chihiro.mgmt }}
+                    sveltos.argus.rpcu.io/vault-auth: {{ chihiro.vault }}
+                    sveltos.argus.rpcu.io/cert-manager: {{ chihiro.certManager }}
+                    sveltos.argus.rpcu.io/external-dns: {{ chihiro.externalDns }}
+                    sveltos.argus.rpcu.io/gateway-api: {{ chihiro.gatewayApi }}
+                    sveltos.argus.rpcu.io/csi-driver-nfs: {{ chihiro.csiDriverNfs }}
+                    sveltos.argus.rpcu.io/dragonfly: {{ chihiro.dragonfly }}
+                    # sveltos.argus.rpcu.io/kyverno: "enabled"
+                    sveltos.argus.rpcu.io/monitoring: {{ chihiro.monitoring }}
+                    sveltos.argus.rpcu.io/openchoreo-data-plane: {{ chihiro.openchoreoDataPlane }}
+                    sveltos.argus.rpcu.io/kamaji-apiserver-proxy: "enabled"
+                    dike.rpcu.io/enabled: "true"
+                    type: workload
+                spec:
+                  clusterNetwork:
+                    pods:
+                      cidrBlocks:
+                        - {{ chihiro.podCIDR }}
+                    serviceDomain: ignore
+                    services:
+                      cidrBlocks:
+                        - {{ chihiro.serviceCIDR }}
+                  topology:
+                    classRef:
+                      name: openstack-kamaji-external
+                    controlPlane:
+                      replicas: 0
+                    variables:
+                      - name: identityRef
+                        value:
+                          name: mgmt-cloud-config
+                          cloudName: {{ chihiro.cloudName }}
+                      - name: externalNetworkId
+                        value: 1cfd69da-057c-4748-a0d4-de5b0ca77db2
+                      - name: imageName
+                        value: {{ chihiro.imageName }}
+                      - name: oidc
+                        value:
+                          enabled: true
+                          issuerURL: https://rpcu-gabeck.eu1.zitadel.cloud
+                          clientID: "377050089077613929"
+                      - name: managedSubnetCIDR
+                        value: {{ chihiro.managedSubnetCIDR }}
+                      - name: gatewayHostname
+                        value: {{ chihiro.gatewayHostname }}
+                      - name: gatewayName
+                        value: {{ chihiro.gatewayName }}
+                      - name: externalKubeconfigSecretName
+                        value: production-kubeconfig
+                    version: "0.0.0"
+              parameters:
+                cloudName:
+                  label: "Openstack Project"
+                  description: "OpenStack cloud project to provision into"
+                  type: select
+                  options:
+                    - value: "openstack"
+                      label: "admin"
+                    - value: "lab"
+                      label: "lab"
+                    - value: "production"
+                      label: "production"
+                  default: lab
+                podCIDR:
+                  label: "Pod CIDR"
+                  description: "CIDR block for pod networking"
+                  type: string
+                  default: "10.207.0.0/16"
+                serviceCIDR:
+                  label: "Service CIDR"
+                  description: "CIDR block for service networking"
+                  type: string
+                  default: "10.107.0.0/16"
+                imageName:
+                  label: "Node Image"
+                  description: "OpenStack image for cluster nodes"
+                  type: select
+                  options:
+                    - value: "hephaestus-kaas-25.11-{{ chihiro.version }}"
+                      label: "25.11"
+                      constrain:
+                        version: ["v1.35.4"]
+                    - value: "hephaestus-kaas-2-26.05-{{ chihiro.version }}"
+                      label: "26.05-2"
+                      constrain:
+                        version: ["v1.36.1"]
+                  default: "hephaestus-kaas-26.05-{{ chihiro.version }}"
+                  editable: true
+                  path: "spec.topology.variables[2].value"
+                managedSubnetCIDR:
+                  label: "Managed Subnet CIDR"
+                  description: "CIDR block for the managed subnet"
+                  type: string
+                  default: "192.168.1.0/24"
+                # Boolean (checkbox) addon toggles. editable + path lets them be flipped
+                # after creation; the label key is single-quoted in the path because it
+                # contains dots.
+                cilium:
+                  label: "Cilium CNI"
+                  description: "Enable the Cilium addon via Sveltos"
+                  type: boolean
+                  default: true
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/cilium'"
+                oidcRbac:
+                  label: "OIDC RBAC"
+                  description: "Enable OIDC RBAC addon via Sveltos"
+                  type: boolean
+                  default: true
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/oidc-rbac'"
+                  visible_groups:
+                    - kube-admin
+                openstack:
+                  label: "Openstack Integration"
+                  description: "Enable Service Type LB using Octavia and CSI using Cinder"
+                  type: boolean
+                  default: false
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/openstack-integration'"
+                mgmt:
+                  label: "Management Cluster"
+                  description: "Enable CAPI Operator and make this a Cluster Generator"
+                  type: boolean
+                  default: false
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/capi-management'"
+                # CAPO (OpenStack infrastructure provider) version override for a cluster
+                # that is itself a management cluster (mgmt: enabled). The "default"
+                # sentinel means "leave the repo-pinned version" — the Sveltos
+                # capi-management ClusterProfile only patches the provider version when
+                # this is a real version string. Editable so it can be changed later.
+                capoVersion:
+                  label: "CAPO Version"
+                  description: "OpenStack provider (CAPO) version when this is a management cluster; 'default' keeps the repo-pinned version"
+                  type: select
+                  options:
+                    - value: "default"
+                      label: "Default (repo-pinned)"
+                    - value: "v0.10.5"
+                      label: "v0.10.5"
+                    - value: "v0.11.3"
+                      label: "v0.11.3"
+                    - value: "v0.14.4"
+                      label: "v0.14.4"
+                  default: "default"
+                  editable: true
+                  path: "metadata.annotations.'sveltos.argus.rpcu.io/capo-version'"
+                  visible_groups:
+                    - kube-admin
+                vault:
+                  label: "Vault Secret Integration"
+                  description: "Enable Vault Secret store"
+                  type: boolean
+                  default: false
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/vault-auth'"
+                certManager:
+                  label: "Cert-Manager Vault Issuer"
+                  description: "Enable cert-manager + a vault-issuer ClusterIssuer backed by the shared mgmt Vault PKI (subdomain-isolated to <cluster>.rpcu.lan). Prerequisite for Gateway API (its HTTPS listener needs the vault-issuer Certificate) — enable this whenever Gateway API is enabled."
+                  type: boolean
+                  default: false
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/cert-manager'"
+                externalDns:
+                  label: "External DNS"
+                  description: "Enable InternalDNS addon via Sveltos"
+                  type: boolean
+                  default: false
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/external-dns'"
+                gatewayApi:
+                  label: "Gateway API"
+                  description: "Enable Gateway API and kgateway addon via Sveltos. Requires Cert-Manager Vault Issuer (the Gateway HTTPS listener terminates TLS with a cert-manager Certificate signed by vault-issuer); gateway-api-resources dependsOn cert-manager."
+                  type: boolean
+                  default: false
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/gateway-api'"
+                csiDriverNfs:
+                  label: "CephFS NFS (RWX)"
+                  description: "Enable CephFS NFS CSI driver for ReadWriteMany volumes via the openstack Ceph cluster's NFS gateway"
+                  type: boolean
+                  default: false
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/csi-driver-nfs'"
+                dragonfly:
+                  label: "Dragonfly (Redis)"
+                  description: "Enable the DragonflyDB (Redis-compatible) operator via Sveltos so workload apps can provision Dragonfly instances"
+                  type: boolean
+                  default: false
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/dragonfly'"
+                monitoring:
+                  label: "Monitoring"
+                  description: "Enable kube-prometheus-stack via Sveltos, remote_writing metrics to the central Mimir on mgmt (https://mimir.mgmt.rpcu.lan)"
+                  type: boolean
+                  default: false
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/monitoring'"
+                openchoreoDataPlane:
+                  label: "OpenChoreo Data Plane"
+                  description: "Run the OpenChoreo data-plane agent (Sveltos) so the cluster can be an OpenChoreo DataPlane (planeID = cluster name; needs a matching DataPlane CR in hestia). Requires Cert-Manager Vault Issuer."
+                  type: boolean
+                  default: false
+                  true_value: enabled
+                  false_value: disabled
+                  editable: true
+                  path: "metadata.labels.'sveltos.argus.rpcu.io/openchoreo-data-plane'"
+                  visible_groups:
+                    - kube-admin
+                # ── External Kamaji cluster options ──────────────────────────────────
+                # gatewayName selects which Gateway the tenant API server TLSRoute
+                # attaches to. gatewayHostname is a CONSTRAINED select: each option is
+                # tied (via `constrain`) to a gatewayName value, so picking the gateway
+                # auto-selects the matching domain (rpcu.lan for the internal gateway,
+                # rpcu.io for the public one).
+                #
+                # Both are CREATE-TIME ONLY (no `editable`/`path`) — deliberately:
+                #   1. The advertised API endpoint is baked into every issued kubeconfig,
+                #      the TLSRoute hostname and the apiserver cert SAN (certSANs patch).
+                #      Changing it on a live cluster breaks all three and needs a
+                #      control-plane roll, so it is not a safe post-creation edit.
+                #   2. gatewayHostname embeds {{ chihiro.name }}. The server-side
+                #      recompute token table is built only from the
+                #      chihiro.io/parameters annotation and never carries the cluster
+                #      name, so an edit would write the LITERAL "{{ chihiro.name }}..."
+                #      into spec.topology.variables[].value. Omitting `path` makes
+                #      recomputeDependents skip these entirely (it ignores params with
+                #      no path), so that leak cannot happen.
+                # Create-time selection is unaffected: injection goes through
+                # cluster.template ({{ chihiro.gatewayHostname }}), not `path`, and the
+                # create form resolves the name token client-side.
+                gatewayName:
+                  label: "Gateway Name"
+                  description: "Which Gateway to attach the tenant API server TLSRoute to. Selecting this auto-sets the API Gateway Hostname domain. Cannot be changed after creation."
+                  type: select
+                  options:
+                    - value: "https"
+                      label: "https (internal — *.kcp.<cluster>.rpcu.lan)"
+                    - value: "https-external"
+                      label: "https-external (public — *.kcp.<cluster>.rpcu.io)"
+                  default: "https"
+                gatewayHostname:
+                  label: "API Gateway Hostname"
+                  description: "FQDN for the tenant API server TLSRoute. Auto-selected from the Gateway Name: <cluster>.kcp.production.rpcu.lan for 'https', <cluster>.kcp.rpcu.io for 'https-external'. Cannot be changed after creation."
+                  type: select
+                  options:
+                    - value: "{{ chihiro.name }}.kcp.production.rpcu.lan"
+                      label: "<cluster>.kcp.production.rpcu.lan (internal)"
+                      constrain:
+                        gatewayName: ["https"]
+                    - value: "{{ chihiro.name }}.kcp.rpcu.io"
+                      label: "<cluster>.kcp.rpcu.io (public)"
+                      constrain:
+                        gatewayName: ["https-external"]
+                  default: "{{ chihiro.name }}.kcp.production.rpcu.lan"
+      env:
+        - key: CHIHIRO_HOST
+          value: '0.0.0.0'
+        - key: CHIHIRO_PORT
+          value: '8080'
+        - key: CHIHIRO_DOCS_URL
+          value: 'https://docs.rpcu.io/'
+        - key: CHIHIRO_OIDC_ISSUER_URL
+          value: 'https://rpcu-gabeck.eu1.zitadel.cloud'
+        # Vault secrets-production/chihiro via SecretReference chihiro-public.
+        - key: CHIHIRO_OIDC_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: chihiro-public
+              key: clientId
+        - key: CHIHIRO_OIDC_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: chihiro-public
+              key: clientSecret
+        - key: CHIHIRO_SESSION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: chihiro-public
+              key: session_key
+        - key: CHIHIRO_SESSION_TTL
+          value: '7200'
+        - key: CHIHIRO_REDIS_ADDR
+          value: 'chihiro-session-store:6379'
+        - key: CHIHIRO_CLUSTER_DOMAIN
+          value: 'mgmt.rpcu.lan'
+        - key: CHIHIRO_CLUSTER_PORT
+          value: '443'
+        - key: CHIHIRO_ADMIN_GROUPS
+          value: 'kube-admin'
+        - key: CHIHIRO_CREATOR_GROUPS
+          value: 'kube-admin'
+        - key: CHIHIRO_AVAILABLE_VERSIONS
+          value: 'v1.36.1,v1.35.4'
+        - key: CHIHIRO_MAX_CLUSTERS
+          value: '5'
+        - key: CHIHIRO_MAX_TOTAL_NODES
+          value: '10'
+        - key: CHIHIRO_MAX_TOTAL_CP
+          value: '9'
+        - key: CHIHIRO_SVELTOS_ENABLED
+          value: 'true'
+        - key: CHIHIRO_DEVMODE
+          value: 'false'
+        # Talk to the mgmt API (CAPI lives there, not on this cluster).
+        - key: KUBECONFIG
+          value: '/etc/chihiro/kubeconfig'
+        # Internet-facing over HTTPS only: mark session cookies Secure.
+        - key: CHIHIRO_SESSION_SECURE
+          value: 'true'
+---
+apiVersion: openchoreo.dev/v1alpha1
+kind: SecretReference
+metadata:
+  name: chihiro-production
+  namespace: rpcu
+spec:
+  targetPlane:
+    kind: DataPlane
+    name: mgmt
+  refreshInterval: 1h
+  template:
+    type: Opaque
+  data:
+    - secretKey: clientId
+      remoteRef:
+        key: chihiro
+        property: clientId
+    - secretKey: clientSecret
+      remoteRef:
+        key: chihiro
+        property: clientSecret
+    - secretKey: session_key
+      remoteRef:
+        key: chihiro
+        property: session_key
+---
+apiVersion: openchoreo.dev/v1alpha1
+kind: SecretReference
+metadata:
+  name: chihiro-public
+  namespace: rpcu
+spec:
+  targetPlane:
+    kind: DataPlane
+    name: production
+  refreshInterval: 1h
+  template:
+    type: Opaque
+  data:
+    - secretKey: clientId
+      remoteRef:
+        key: chihiro
+        property: clientId
+    - secretKey: clientSecret
+      remoteRef:
+        key: chihiro
+        property: clientSecret
+    - secretKey: session_key
+      remoteRef:
+        key: chihiro
+        property: session_key
+    - secretKey: kubeconfig
+      remoteRef:
+        key: chihiro
+        property: kubeconfig

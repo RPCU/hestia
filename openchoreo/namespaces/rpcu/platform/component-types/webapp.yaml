@@ -45,6 +45,8 @@ spec:
     - name: api-configuration
     - name: dragonfly
     - name: rbac
+    - name: http-route
+    - name: load-balancer
   validations:
     - rule: "${workload.endpoints.exists(name, endpoint, endpoint.type == 'HTTP')}"
       message: 'Web-application components must have at least one HTTP.'

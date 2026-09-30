@@ -3,12 +3,17 @@ kind: Environment
 metadata:
   name: production
   annotations:
+    # dataPlaneRef is immutable: Flux deletes + recreates the Environment when
+    # it changes (moved test -> mgmt on 2026-09-30; nothing was deployed there).
+    kustomize.toolkit.fluxcd.io/force: enabled
     openchoreo.dev/display-name: Production
     openchoreo.dev/description: Production environment for live workloads
   labels:
     openchoreo.dev/name: production
 spec:
+  # mgmt: internal production (chihiro.mgmt.rpcu.lan). The public/external
+  # counterpart is the "public" environment on the production cluster.
   dataPlaneRef:
     kind: DataPlane
-    name: test
+    name: mgmt
   isProduction: true

@@ -17,3 +17,4 @@ spec:
         name: staging
       targetEnvironmentRefs:
         - name: production
+        - name: public
