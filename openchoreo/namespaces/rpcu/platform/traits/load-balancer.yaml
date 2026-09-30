@@ -1,0 +1,83 @@
+# Trait for exposing a component through a Service of type LoadBalancer.
+# Namespace-scoped: available to Components in the rpcu namespace.
+#
+# Creates the LoadBalancer Service and a NetworkPolicy admitting traffic to the
+# component's pods on targetPort from anywhere: the NetworkPolicies OpenChoreo
+# renders only admit in-cluster sources (same namespace, system components,
+# kgateway-system), which would drop LB traffic.
+#
+# Per environment and disabled by default. Used by chihiro on mgmt to keep its
+# historical fixed address (172.16.255.11, OpenStack Octavia).
+apiVersion: openchoreo.dev/v1alpha1
+kind: Trait
+metadata:
+  name: load-balancer
+  namespace: rpcu
+spec:
+  environmentConfigs:
+    openAPIV3Schema:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          default: false
+          description: 'Create the LoadBalancer in this environment.'
+        loadBalancerIP:
+          type: string
+          default: ''
+          description: 'Fixed address to request; empty lets the provider pick.'
+        annotations:
+          type: object
+          additionalProperties:
+            type: string
+          default: {}
+          description: 'Service annotations (e.g. loadbalancer.openstack.org/load-balancer-address).'
+        port:
+          type: integer
+          default: 8080
+          description: 'Port exposed by the load balancer.'
+        targetPort:
+          type: integer
+          default: 8080
+          description: 'Container port traffic is sent to.'
+
+  creates:
+    - targetPlane: dataplane
+      includeWhen: ${environmentConfigs.enabled}
+      template:
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: ${metadata.componentName}-${trait.instanceName}
+          namespace: ${metadata.namespace}
+          labels: ${metadata.labels}
+          annotations: ${environmentConfigs.annotations}
+        spec:
+          type: LoadBalancer
+          loadBalancerIP: |
+            ${environmentConfigs.loadBalancerIP != "" ? environmentConfigs.loadBalancerIP : oc_omit()}
+          selector: ${metadata.podSelectors}
+          ports:
+            - name: http
+              protocol: TCP
+              port: ${environmentConfigs.port}
+              targetPort: ${environmentConfigs.targetPort}
+
+    - targetPlane: dataplane
+      includeWhen: ${environmentConfigs.enabled}
+      template:
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        metadata:
+          name: ${metadata.name}-${trait.instanceName}
+          namespace: ${metadata.namespace}
+          labels: ${metadata.labels}
+        spec:
+          podSelector:
+            matchLabels: ${metadata.podSelectors}
+          policyTypes:
+            - Ingress
+          ingress:
+            - ports:
+                - protocol: TCP
+                  port: ${environmentConfigs.targetPort}

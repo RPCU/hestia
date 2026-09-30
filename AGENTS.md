@@ -249,7 +249,7 @@ per-namespace Kustomizations.
   - **platform/component-types/service.yaml** — `ComponentType/service`
     (workloadType deployment). `allowedWorkflows`: dockerfile / gcp-buildpacks /
     paketo-buildpacks / ballerina-buildpack. `allowedTraits`: api-configuration,
-    dragonfly, rbac. Validation: ≥1 endpoint. Renders Deployment + ClusterIP
+    dragonfly, rbac (web-application also: http-route, load-balancer). Validation: ≥1 endpoint. Renders Deployment + ClusterIP
     Service + external/internal HTTPRoutes + env/file ConfigMaps + ExternalSecret
     env/file mounts via `${dataplane.secretStore}`.
     **Routing shape: path-prefix** — hostname
@@ -268,16 +268,39 @@ per-namespace Kustomizations.
     interval, `gte 1`, severity critical) whose enable/channels/incident knobs
     are wired to a per-env `environmentConfigs.alerting` block on the
     ReleaseBinding. Developers can tune delivery, not the rule.
-  - **platform/infra/environments/** — `development`, `staging`, `production`
-    (only production `isProduction: true`). **All three** reference
-    `dataPlaneRef: {kind: DataPlane, name: test}`.
+  - **platform/infra/dataplanes/** — `DataPlane` `mgmt` (kgateway-system/https,
+    `mgmt.rpcu.lan`), `production` (kgateway-system/**https-external**,
+    `rpcu.io`, internet-facing) and `test` (https, `test.rpcu.lan`; was
+    hand-applied before). planeID = cluster name, `secretStoreRef: vault-backend`
+    (each cluster's own `secrets-<cluster>` Vault mount), observability plane
+    `default`. **clientCA is `secretKeyRef` rpcu/openchoreo-agent-ca `ca.crt`** —
+    the shared agent CA published by argus's `openchoreo-control-plane` Sveltos
+    profile; the agents themselves are deployed by argus (mgmt: Flux; workload
+    clusters: Sveltos `openchoreo-data-plane`, label
+    `sveltos.argus.rpcu.io/openchoreo-data-plane: enabled`).
+  - **platform/infra/environments/** — `development` + `staging` → DataPlane
+    `test`; `production` → `mgmt` (internal); `public` → `production` cluster
+    (external). production and public are `isProduction: true`. `dataPlaneRef` is
+    **immutable**: production.yaml carries `kustomize.toolkit.fluxcd.io/force:
+    enabled` so Flux deletes + recreates it when the ref changes (the Environment
+    has a cleanup finalizer that tears down its bindings' resources first).
   - **platform/infra/deployment-pipelines/standard.yaml** — `DeploymentPipeline
-standard`: development → staging → production.
-  - **platform/traits/dragonfly.yaml** — namespaced `Trait/dragonfly`. Injects a
-    **Redis sidecar container** into the Deployment (`redis:7-alpine` default,
-    port 6379, 15m/256Mi → 500m/512Mi) plus a ClusterIP Service
-    `<name>-<instanceName>`. Despite the name it is not the DragonflyDB operator
-    and it is not a separate workload.
+standard`: development → staging → {production, public}.
+  - **platform/traits/dragonfly.yaml** — namespaced `Trait/dragonfly`. Creates a
+    **DragonflyDB `Dragonfly` CR** `<componentName>-<instanceName>` (operator
+    makes a StatefulSet + Service of that name, port 6379; env configs:
+    replicas, resources 15m/64Mi → 600m/750Mi). Shared by all replicas (the
+    former Redis sidecar was per-pod). Needs the Dragonfly operator on the
+    DataPlane cluster (mgmt, and argus's Sveltos `dragonfly` label elsewhere).
+  - **platform/traits/http-route.yaml** — namespaced `Trait/http-route`: an
+    extra HTTPRoute with explicit `hostnames` on a chosen Gateway listener
+    (`gatewayName`/`gatewayNamespace`/`sectionName`, backend
+    `<componentName>:port`), all per environment, off by default. For stable
+    names the web-application generated hostnames can't give.
+  - **platform/traits/load-balancer.yaml** — namespaced `Trait/load-balancer`:
+    Service type LoadBalancer (`loadBalancerIP`, `annotations`) + a
+    NetworkPolicy admitting its `targetPort` from anywhere (OpenChoreo's
+    policies only admit in-cluster sources). Per environment, off by default.
   - **platform/traits/rbac.yaml** — namespaced `Trait/rbac`. Creates a dedicated
     ServiceAccount `<name>-<instance>`, a ClusterRole + ClusterRoleBinding
     `<ns>-<name>-<instance>` from `parameters.rules`, and patches
@@ -286,15 +309,33 @@ standard`: development → staging → production.
   - **platform/workflows/.gitkeep** — placeholder for namespace-scoped
     `Workflow` CRs; all builders are currently cluster-scoped.
   - **projects/testing/project.yaml** — `Project/testing` (ClusterProjectType
-    `standard`, pipeline `standard`) + three `ProjectReleaseBinding`s, one per
+    `standard`, pipeline `standard`) + four `ProjectReleaseBinding`s, one per
     environment.
   - **projects/testing/chihiro.yaml** — the `chihiro` Component
     (`deployment/web-application`) + its `Workload`. Built by `nix-builder`
-    from `github.com/RPCU/chihiro` (`./nix/oci.nix`, branch main). Traits:
-    `dragonfly/session-store` (the Redis sidecar backing
-    `CHIHIRO_REDIS_ADDR=localhost:6379`) and `rbac/capi-viewer` (namespaces +
+    from `github.com/RPCU/chihiro` (`./nix/oci.nix`, branch main). Four
+    ReleaseBindings: development + staging (test), **production** (mgmt,
+    replaces argus's deployment: `chihiro.mgmt.rpcu.lan` via `http-route/hostname`
+    on https, LB `172.16.255.11` via `load-balancer/lb`, 2 replicas) and
+    **public** (production cluster, `chihiro.rpcu.io` on https-external,
+    `KUBECONFIG=/etc/chihiro/kubeconfig` for the mgmt SA `chihiro-external`,
+    Secure cookies). production/public embed argus's canonical config and read
+    secrets through SecretReferences `chihiro-production` / `chihiro-public`
+    (Vault `secrets-mgmt/chihiro` / `secrets-production/chihiro`, pushed by argus
+    from chihiro-system; the OIDC client stays owned by argus's Crossplane).
+    `releaseName` for staging/production/public is set by promotion, not git.
+    Traits: `dragonfly/session-store` (Dragonfly CR; every binding sets
+    `CHIHIRO_REDIS_ADDR=chihiro-session-store:6379`), `http-route/hostname`,
+    `load-balancer/lb` and `rbac/capi-viewer` (namespaces +
     secrets read, CAPI cluster/machine* read, cluster create/update/patch/delete,
-    infrastructure/controlplane/bootstrap provider read). The Workload mounts a
+    infrastructure/controlplane/bootstrap provider read, Sveltos
+    `clustersummaries` read). Both ReleaseBindings set
+    `CHIHIRO_SVELTOS_ENABLED=true`, so cluster cards show Sveltos add-on status
+    and each cluster page lists its ClusterProfiles/deployments. The container
+    starts via the image's default `Cmd` (`serve --config=/config.yaml`, from
+    chihiro's `nix/oci.nix`): OpenChoreo can't set command/args (neither
+    `workloadOverrides` nor the `workload.yaml` descriptor supports them), so
+    that default is load-bearing. The Workload mounts a
     large `/config.yaml` describing chihiro's cluster-creation form — **this is
     the UI contract for argus**: `cluster.template` emits a CAPI `Cluster` in ns
     `mgmt` with the `sveltos.argus.rpcu.io/*` add-on labels and the
@@ -622,21 +663,13 @@ their next render.
 
 ### Missing / external references
 
-- **`DataPlane/test` is not in this repo.** All three Environments point at it.
-  It must be registered out-of-band in the `rpcu` namespace (agent CA, gateway
-  hostnames, `secretStore`, `observabilityPlaneRef`). Without it, every
-  ReleaseBinding fails to resolve, and `${dataplane.secretStore}` in the
-  ComponentTypes renders empty.
 - **`api-configuration` trait is not in this repo** but is listed in both
   ComponentTypes' `allowedTraits` — it comes from the OpenChoreo charts.
-- **`chihiro-secrets`**: `chihiro.yaml`'s env block reads
-  `clientId`/`clientSecret`/`sessionKey` from a Secret named `chihiro-secrets`
-  via a raw `valueFrom.secretKeyRef`, and an in-file comment attributes it to a
-  `secrets` trait. **No such trait exists here** (only `dragonfly` and `rbac` are
-  declared, and only those two are attached). Either add the trait or move the
-  values to the ComponentType's `secret-env-external` path
-  (`configurations.toSecretEnvsByContainer()`), which is the supported
-  ExternalSecret mechanism.
+- **`SecretReference/chihiro-staging` is not in this repo** (hand-applied,
+  `secret/rpcu/generic/chihiro-staging` in the test cluster's Vault mount). The
+  staging binding's `valueFrom.secretKeyRef` names it; OpenChoreo turns such
+  refs into ExternalSecrets on the DataPlane (`secret-env-external`). The
+  production/public SecretReferences live in `chihiro.yaml`.
 - **Registry host**: `publish-image` pushes to `zot.rpcu.io/public`.
   The `chihiro` Workload defaults to `zot.rpcu.io/public/chihiro:latest`; the
   build pipeline's `generate-workload` step overwrites it with the
@@ -807,7 +840,14 @@ onto a cluster whose infrastructure is owned by argus.
 
 ---
 
-**Last Updated**: 2026-09-28 — OpenSearch data pool 2 → 1 (replicas 0), see
+**Last Updated**: 2026-09-30 — DataPlanes as code (mgmt, production, test;
+clientCA from argus's shared agent CA), `public` environment (production
+cluster), production env → mgmt; chihiro production (mgmt, replaces argus) and
+public (chihiro.rpcu.io) bindings; new `http-route` and `load-balancer` traits;
+`dragonfly` trait now a DragonflyDB CR. Earlier the same day: chihiro: Sveltos add-on status enabled in both
+ReleaseBindings (`CHIHIRO_SVELTOS_ENABLED`, `clustersummaries` read in
+`rbac/capi-viewer`); the dev CrashLoop (bare `chihiro` printing usage) is fixed
+by the image's default `Cmd`. Earlier: 2026-09-28 — OpenSearch data pool 2 → 1 (replicas 0), see
 "OpenSearch sizing". — Prior: September 2026 — Initial AGENTS.md. Documents the full
 `infrastructure/` reconciliation chain (fluxcd self-management → cnpg →
 openchoreo-requirements → thunderid → control/workflow/observability planes →

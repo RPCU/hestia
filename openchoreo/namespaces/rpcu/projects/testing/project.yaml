@@ -46,3 +46,14 @@ spec:
   owner:
     projectName: testing
   environment: production
+---
+apiVersion: openchoreo.dev/v1alpha1
+kind: ProjectReleaseBinding
+metadata:
+  labels:
+    openchoreo.dev/name: testing-public
+  name: testing-public
+spec:
+  owner:
+    projectName: testing
+  environment: public

@@ -1,3 +1,18 @@
+# Trait for a DragonflyDB (Redis-compatible) instance next to a component.
+# Namespace-scoped: available to Components in the rpcu namespace.
+#
+# Creates a Dragonfly CR (dragonflydb.io/v1alpha1) in the component's
+# environment namespace; the Dragonfly operator (argus: dragonfly-operator on
+# mgmt, Sveltos `dragonfly` profile on workload clusters) turns it into a
+# StatefulSet + a Service of the SAME name, port 6379. Unlike the former Redis
+# sidecar, the instance is shared by every replica, so sessions survive
+# load-balancing across pods.
+#
+# The Service name is predictable — <componentName>-<instanceName> — so point
+# the app at it with a plain env var, e.g. for chihiro with instanceName
+# session-store: CHIHIRO_REDIS_ADDR=chihiro-session-store:6379.
+#
+# Requires the Dragonfly operator on the DataPlane's cluster.
 apiVersion: openchoreo.dev/v1alpha1
 kind: Trait
 metadata:
@@ -8,18 +23,10 @@ spec:
     openAPIV3Schema:
       type: object
       properties:
-        enabled:
-          type: boolean
-          default: true
-          description: 'Enable the Redis sidecar. Disable for environments where the app uses cookie sessions.'
-        image:
-          type: string
-          default: 'redis:7-alpine'
-          description: 'Redis container image.'
-        port:
+        replicas:
           type: integer
-          default: 6379
-          description: 'Redis listening port.'
+          default: 1
+          description: 'Dragonfly replicas (1 primary + N-1 replicas).'
         resources:
           type: object
           properties:
@@ -31,61 +38,41 @@ spec:
                   default: '15m'
                 memory:
                   type: string
-                  default: '256Mi'
+                  default: '64Mi'
             limits:
               type: object
               properties:
                 cpu:
                   type: string
-                  default: '500m'
+                  default: '600m'
                 memory:
                   type: string
-                  default: '512Mi'
+                  default: '750Mi'
+          # Dragonfly sizes its proactor threads from the CPU limit and needs
+          # 256MiB per thread under the memory limit, so keep both limits.
           default:
             requests:
               cpu: '15m'
-              memory: '256Mi'
+              memory: '64Mi'
             limits:
-              cpu: '500m'
-              memory: '512Mi'
+              cpu: '600m'
+              memory: '750Mi'
 
   creates:
     - targetPlane: dataplane
-      includeWhen: ${environmentConfigs.enabled}
       template:
-        apiVersion: v1
-        kind: Service
+        apiVersion: dragonflydb.io/v1alpha1
+        kind: Dragonfly
         metadata:
-          name: ${metadata.name}-${trait.instanceName}
+          name: ${metadata.componentName}-${trait.instanceName}
           namespace: ${metadata.namespace}
           labels: ${metadata.labels}
         spec:
-          type: ClusterIP
-          selector: ${metadata.podSelectors}
-          ports:
-            - name: redis
-              port: ${environmentConfigs.port}
-              targetPort: ${environmentConfigs.port}
-
-  patches:
-    - target:
-        group: apps
-        version: v1
-        kind: Deployment
-      targetPlane: dataplane
-      operations:
-        - op: add
-          path: /spec/template/spec/containers/-
-          value:
-            name: ${trait.instanceName}
-            image: ${environmentConfigs.image}
-            ports:
-              - containerPort: ${environmentConfigs.port}
-                name: redis
-            resources:
-              requests:
-                cpu: ${environmentConfigs.resources.requests.cpu}
-                memory: ${environmentConfigs.resources.requests.memory}
-              limits:
-                cpu: ${environmentConfigs.resources.limits.cpu}
-                memory: ${environmentConfigs.resources.limits.memory}
+          replicas: ${environmentConfigs.replicas}
+          resources:
+            requests:
+              cpu: ${environmentConfigs.resources.requests.cpu}
+              memory: ${environmentConfigs.resources.requests.memory}
+            limits:
+              cpu: ${environmentConfigs.resources.limits.cpu}
+              memory: ${environmentConfigs.resources.limits.memory}

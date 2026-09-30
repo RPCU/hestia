@@ -1,0 +1,32 @@
+# test cluster (*.test.rpcu.lan). Backs development and staging. Was applied by hand before; now owned by Flux.
+#
+# The agent on the cluster is deployed by argus (mgmt: clusters/mgmt/
+# openchoreo-data-plane.yaml; workload clusters: Sveltos profile
+# openchoreo-data-plane, planeID = cluster name). Its client cert is signed by
+# the shared agent CA, whose public cert argus publishes to
+# rpcu/openchoreo-agent-ca (Sveltos profile openchoreo-control-plane).
+apiVersion: openchoreo.dev/v1alpha1
+kind: DataPlane
+metadata:
+  name: test
+spec:
+  planeID: test
+  clusterAgent:
+    clientCA:
+      secretKeyRef:
+        namespace: rpcu
+        name: openchoreo-agent-ca
+        key: ca.crt
+  gateway:
+    ingress:
+      external:
+        name: https
+        namespace: kgateway-system
+        https:
+          host: test.rpcu.lan
+          port: 443
+  secretStoreRef:
+    name: vault-backend
+  observabilityPlaneRef:
+    kind: ClusterObservabilityPlane
+    name: default

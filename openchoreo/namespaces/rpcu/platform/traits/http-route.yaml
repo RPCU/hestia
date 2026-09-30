@@ -1,0 +1,81 @@
+# Trait for serving a component on a fixed hostname.
+# Namespace-scoped: available to Components in the rpcu namespace.
+#
+# The web-application ComponentType always generates hostnames of the form
+# <endpoint>-<component>-<env>-<ns>-<hash>.<gateway host>. This trait adds one
+# extra HTTPRoute with explicit hostnames, attached to a chosen Gateway listener,
+# for components that must keep a stable, human-facing name (e.g. chihiro on
+# chihiro.mgmt.rpcu.lan / chihiro.rpcu.io). The generated route keeps working.
+#
+# Everything is per environment (traitEnvironmentConfigs in the ReleaseBinding),
+# since each environment lands on a different cluster/gateway. Disabled by
+# default. The Gateway must be in kgateway-system (the ClusterProjectType only
+# admits ingress from there) and its listener must cover the hostnames.
+#
+# Usage in a Component:
+#   traits:
+#     - kind: Trait
+#       name: http-route
+#       instanceName: hostname
+# and in a ReleaseBinding:
+#   traitEnvironmentConfigs:
+#     hostname:
+#       enabled: true
+#       hostnames: ['chihiro.mgmt.rpcu.lan']
+apiVersion: openchoreo.dev/v1alpha1
+kind: Trait
+metadata:
+  name: http-route
+  namespace: rpcu
+spec:
+  environmentConfigs:
+    openAPIV3Schema:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          default: false
+          description: 'Create the HTTPRoute in this environment.'
+        hostnames:
+          type: array
+          items:
+            type: string
+          default: []
+          description: 'Hostnames served by the route.'
+        gatewayName:
+          type: string
+          default: 'https'
+          description: 'Gateway to attach to (in gatewayNamespace).'
+        gatewayNamespace:
+          type: string
+          default: 'kgateway-system'
+          description: 'Namespace of the Gateway.'
+        sectionName:
+          type: string
+          default: 'https'
+          description: 'Gateway listener to attach to.'
+        port:
+          type: integer
+          default: 8080
+          description: 'Port of the component Service to route to.'
+
+  creates:
+    - targetPlane: dataplane
+      includeWhen: ${environmentConfigs.enabled}
+      template:
+        apiVersion: gateway.networking.k8s.io/v1
+        kind: HTTPRoute
+        metadata:
+          name: ${metadata.name}-${trait.instanceName}
+          namespace: ${metadata.namespace}
+          labels: ${metadata.labels}
+        spec:
+          parentRefs:
+            - name: ${environmentConfigs.gatewayName}
+              namespace: ${environmentConfigs.gatewayNamespace}
+              sectionName: ${environmentConfigs.sectionName}
+          hostnames: ${environmentConfigs.hostnames}
+          rules:
+            - backendRefs:
+                - name: ${metadata.componentName}
+                  port: ${environmentConfigs.port}
