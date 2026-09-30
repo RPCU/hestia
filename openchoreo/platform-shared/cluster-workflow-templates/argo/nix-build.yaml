@@ -19,6 +19,8 @@
 # (`nix copy`). This is far faster than seeding /nix/store directly, which
 # both shadowed the image's store and never actually persisted newly-built
 # paths (the store DB lives on the ephemeral rootfs, not the PVC).
+# The same PVC also holds /nix-cache/go-build, an opt-in persistent Go build
+# cache so incremental Go builds skip recompiling unchanged dependencies.
 apiVersion: argoproj.io/v1alpha1
 kind: ClusterWorkflowTemplate
 metadata:
@@ -92,6 +94,13 @@ spec:
             # dedicated PVC, so we trade a little space for faster push/pull.
             CACHE_URI="file://${CACHE_DIR}?compression=none"
             mkdir -p "$CACHE_DIR"
+            # Shared, world-writable directory for language build caches that
+            # outlive the Nix store (e.g. Go's GOCACHE, via a Nix expression arg
+            # such as chihiro's goCacheDir=/nix-cache/go-build). Builds run as
+            # the nixbld users, so it has to be writable by all of them. Only
+            # useful because sandbox = false; hermetic builds just ignore it.
+            mkdir -p "$CACHE_DIR/go-build"
+            chmod 0777 "$CACHE_DIR/go-build"
 
             # Write nix.conf rather than a multi-line NIX_CONFIG env var (keeps the
             # YAML block scalar clean). The PVC cache is added as a trusted
@@ -100,13 +109,26 @@ spec:
             # this local, trusted cache. nix-command is enabled only so `nix copy`
             # works — the build itself still uses classic nix-build. Network is
             # still needed for the nixpkgs channel and uncached fixed-output derivs.
+            #
+            # The final `nix copy` below only pushes the *runtime* closure, so
+            # build-time outputs (e.g. a buildGoModule's go-modules FOD) would be
+            # refetched every run. A post-build-hook pushes every path built
+            # locally in this run as soon as it is built, so those are cached too.
+            # priority=10 makes Nix query the PVC before cache.nixos.org (40).
             mkdir -p /etc/nix
+            cat > /etc/nix/push-to-cache.sh <<EOF
+            #!/bin/sh
+            [ -n "\$OUT_PATHS" ] || exit 0
+            nix copy --to '${CACHE_URI}' \$OUT_PATHS || echo ">> Warning: cache push of \$OUT_PATHS failed" >&2
+            EOF
+            chmod +x /etc/nix/push-to-cache.sh
             {
               echo "experimental-features = nix-command"
               echo "sandbox = false"
               echo "require-sigs = false"
-              echo "substituters = https://cache.nixos.org ${CACHE_URI}"
-              echo "trusted-substituters = ${CACHE_URI}"
+              echo "substituters = https://cache.nixos.org ${CACHE_URI}&priority=10"
+              echo "trusted-substituters = ${CACHE_URI}&priority=10"
+              echo "post-build-hook = /etc/nix/push-to-cache.sh"
             } >> /etc/nix/nix.conf
 
             APP_DIR="/mnt/vol/source"
