@@ -102,6 +102,12 @@ pointers** (to a subdirectory) and **inline HelmReleases/CRs**:
   - `thunderid-bootstrap.yaml` — ns `thunderid` + ExternalSecret
     `thunderid-bootstrap` (`backstage-client-secret`, `admin-password`,
     `zitadel-client-secret`, `workflows-client-secret`, `observer-client-secret`).
+  - `git-webhook-secrets.yaml` — ExternalSecret `git-webhook-secrets` (ns
+    openchoreo-control-plane), key `github-secret` ← Vault
+    `openchoreo/git-webhook`.`github-secret`. openchoreo-api validates GitHub
+    autobuild webhooks (`X-Hub-Signature-256`) against it; the Secret name,
+    namespace and key are **hardcoded** in openchoreo-api. Same value as the
+    GitHub webhook's "Secret". See "Autobuild webhook" under chihiro.
 - **thunderid.yaml** → Kustomization `thunderid`
   (`dependsOn: openchoreo-requirements`, 10m interval/timeout) → `thunderid/`:
   OCI HelmRepository `thunder-id` (`oci://ghcr.io/thunder-id/helm-charts`) +
@@ -329,6 +335,16 @@ standard`: development → staging → {production, public}.
     (Vault `secrets-mgmt/chihiro` / `secrets-production/chihiro`, pushed by argus
     from chihiro-system; the OIDC client stays owned by argus's Crossplane).
     `releaseName` for staging/production/public is set by promotion, not git.
+    **Autobuild**: `spec.autoBuild: true`. A GitHub push webhook on
+    RPCU/chihiro → `https://openchoreo.rpcu.io/api/v1alpha1/autobuild` (atlas
+    `https-external` HTTPRoute exposing **only that path**, static Backend →
+    this cluster's `gateway-default` `172.16.255.118:80`, Host rewritten to
+    `api.platform.rpcu.lan`) → openchoreo-api (endpoint is `security: []`,
+    HMAC-checked against `git-webhook-secrets`) → a WorkflowRun for every
+    `autoBuild` Component whose repo URL + branch match. `repository.appPath` is
+    deliberately **unset**: the webhook compares it literally with GitHub's
+    modified paths, so `.` matches nothing and every push is skipped (unset →
+    always affected; the build still gets the schema default `.`).
     Traits: `dragonfly/session-store` (Dragonfly CR; every binding sets
     `CHIHIRO_REDIS_ADDR=chihiro-session-store:6379`), `http-route/hostname`,
     `load-balancer/lb` and `rbac/capi-viewer` (namespaces +
@@ -515,7 +531,8 @@ Kustomizations 5m; HelmReleases 5m (cnpg + its HelmRepository 1h).
   `backstage/db` (username, password), `backstage/bootstrap` (client-secret),
   `opensearch` (username, password, writer-password), `observer` (client-secret),
   `thunderid` (admin-password, zitadel-client-secret, workflows-client-secret),
-  `registry-push-secret` (value = a dockerconfigjson).
+  `registry-push-secret` (value = a dockerconfigjson),
+  `openchoreo/git-webhook` (github-secret).
 - **Formatting**: no enforced formatter. The tracked files use double-quoted
   YAML scalars; the in-flight ComponentType edits use single quotes. Match the
   file you are editing.
@@ -845,7 +862,9 @@ onto a cluster whose infrastructure is owned by argus.
 
 ---
 
-**Last Updated**: 2026-09-30 — DataPlanes as code (mgmt, production, test;
+**Last Updated**: 2026-09-30 — chihiro autobuild: `autoBuild: true`,
+`appPath` unset, `git-webhook-secrets` ExternalSecret; GitHub webhook reaches
+openchoreo-api through atlas's `openchoreo.rpcu.io` route. Earlier: DataPlanes as code (mgmt, production, test;
 clientCA from argus's shared agent CA), `public` environment (production
 cluster), production env → mgmt; chihiro production (mgmt, replaces argus) and
 public (chihiro.rpcu.io) bindings; new `http-route` and `load-balancer` traits;
