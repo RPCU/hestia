@@ -90,6 +90,10 @@ spec:
           - apiGroups: ['config.projectsveltos.io']
             resources: ['clustersummaries']
             verbs: ['get', 'list', 'watch']
+          # Resources each add-on deployed, read on demand on the cluster page.
+          - apiGroups: ['config.projectsveltos.io']
+            resources: ['clusterconfigurations']
+            verbs: ['get']
 ---
 apiVersion: openchoreo.dev/v1alpha1
 kind: ReleaseBinding
