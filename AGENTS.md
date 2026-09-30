@@ -414,6 +414,12 @@ standard`: development → staging → {production, public}.
       repos on push and the `public` path allows anonymous pull, so there is no
       per-package rights management and **no data-plane pull secret**. Outputs
       the full image ref.
+    - `wait-for-image.yaml` — RPCU-authored `wait-for-image`, for images built
+      outside Argo (GitHub Actions). Polls zot anonymously (the `public` path
+      allows pull) for `zot.rpcu.io/public/<image-name>:<tag>` — same tag rule
+      as `publish-image`: git tag, else the 8-char SHA — every 10s up to
+      `timeout-seconds` (default 1200), then outputs the image ref. No
+      privileges, no registry secret.
     - `generate-workload.yaml` — `generate-workload-cr`. An initContainer copies
       `occ` out of `ghcr.io/openchoreo/openchoreo-cli:latest-dev`; the main
       container runs `occ workload create` (from the repo's `workload.yaml`
@@ -427,7 +433,8 @@ standard`: development → staging → {production, public}.
       per-tenant secret or pre-created `workflows-<org>` namespaces. On 409 a
       source-defined workload is fully replaced; an auto-generated one only has
       its container image patched.
-  - `workflows/` — the five `ClusterWorkflow` CRs developers pick from. All
+  - `workflows/` — the `ClusterWorkflow` CRs developers pick from. The five
+    builders all
     share: `workflowPlaneRef: ClusterWorkflowPlane/default`,
     `ttlAfterCompletion: 1d`, `serviceAccountName: workflow-sa`, a four-step
     pipeline (checkout-source → build-image → publish-image →
@@ -447,6 +454,12 @@ standard`: development → staging → {production, public}.
       them is the obvious consistency fix.
     - `nix-builder` accepts `buildEnv` purely for interface compatibility —
       Nix builds are hermetic and never see it.
+    - `prebuilt-image` (RPCU, 1Gi workspace) builds nothing: checkout-source →
+      wait-for-image → generate-workload-cr, for repos whose CI pushes
+      `zot.rpcu.io/public/<imageName>:<git tag or short SHA>` itself (chihiro:
+      GitHub Actions `image.yaml`). Same `repository`/`imageName` parameters,
+      plus `waitTimeoutSeconds`; only the git and workload-publisher
+      ExternalSecrets. Allowed on `web-application`.
   - `infra/workflow-planes/default.yaml` — `ClusterWorkflowPlane/default`. The
     name `default` matches the built-in `ClusterWorkflowPlaneRef` default so
     Workflows resolve without an explicit ref; `planeID: workflow` must match the

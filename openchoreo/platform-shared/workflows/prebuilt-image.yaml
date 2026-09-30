@@ -1,0 +1,191 @@
+apiVersion: openchoreo.dev/v1alpha1
+kind: ClusterWorkflow
+metadata:
+  name: prebuilt-image
+  labels:
+    openchoreo.dev/workflow-type: "component"
+  annotations:
+    openchoreo.dev/description: "Deploy an image built outside OpenChoreo (e.g. GitHub Actions): wait for zot.rpcu.io/public/<imageName>:<git tag or short SHA>, then publish the workload"
+spec:
+  workflowPlaneRef:
+    kind: ClusterWorkflowPlane
+    name: default
+  ttlAfterCompletion: "1d"
+  parameters:
+    openAPIV3Schema:
+      type: object
+      required:
+        - repository
+      properties:
+        repository:
+          type: object
+          description: "Git repository configuration"
+          required:
+            - url
+          properties:
+            url:
+              type: string
+              description: "Git repository URL"
+              x-openchoreo-component-parameter-repository-url: true
+            secretRef:
+              type: string
+              default: ""
+              description: "Secret reference name for Git credentials"
+              x-openchoreo-component-parameter-repository-secret-ref: true
+            revision:
+              type: object
+              default: {}
+              properties:
+                branch:
+                  type: string
+                  default: main
+                  description: "Git branch to checkout"
+                  x-openchoreo-component-parameter-repository-branch: true
+                commit:
+                  type: string
+                  default: ""
+                  description: "Git commit SHA or reference (optional, defaults to latest)"
+                  x-openchoreo-component-parameter-repository-commit: true
+            appPath:
+              type: string
+              default: "."
+              description: "Path to the application directory within the repository (workload.yaml descriptor)"
+              x-openchoreo-component-parameter-repository-app-path: true
+        imageName:
+          type: string
+          default: ""
+          description: "Image name segment at zot.rpcu.io/public/<imageName>. Defaults to the component name when empty."
+        waitTimeoutSeconds:
+          type: string
+          default: "1200"
+          description: "How long to wait for the external build to push the image."
+  runTemplate:
+    apiVersion: argoproj.io/v1alpha1
+    kind: Workflow
+    metadata:
+      name: ${metadata.workflowRunName}
+      namespace: ${metadata.namespace}
+    spec:
+      arguments:
+        parameters:
+          - name: component-name
+            value: ${metadata.labels['openchoreo.dev/component']}
+          - name: project-name
+            value: ${metadata.labels['openchoreo.dev/project']}
+          - name: workflowrun-name
+            value: ${metadata.workflowRunName}
+          - name: namespace-name
+            value: ${metadata.namespaceName}
+          - name: git-repo
+            value: ${parameters.repository.url}
+          - name: branch
+            value: ${parameters.repository.revision.branch}
+          - name: commit
+            value: ${parameters.repository.revision.commit}
+          - name: app-path
+            value: ${parameters.repository.appPath}
+          - name: image-name
+            value: "${has(parameters.imageName) && parameters.imageName != '' ? parameters.imageName : metadata.labels['openchoreo.dev/component']}"
+          - name: wait-timeout-seconds
+            value: ${parameters.waitTimeoutSeconds}
+          - name: git-secret
+            value: ${metadata.workflowRunName}-git-secret
+          - name: workload-publisher-secret
+            value: ${metadata.workflowRunName}-workload-publisher-secret
+      serviceAccountName: workflow-sa
+      entrypoint: deploy-workflow
+      templates:
+        - name: deploy-workflow
+          steps:
+            # The checkout provides the revision/tag to wait for and the
+            # optional workload.yaml descriptor.
+            - - name: checkout-source
+                templateRef:
+                  name: checkout-source
+                  clusterScope: true
+                  template: checkout
+            - - name: wait-for-image
+                templateRef:
+                  name: wait-for-image
+                  clusterScope: true
+                  template: wait-for-image
+                arguments:
+                  parameters:
+                    - name: git-revision
+                      value: '{{steps.checkout-source.outputs.parameters.git-revision}}'
+                    - name: git-tag
+                      value: '{{steps.checkout-source.outputs.parameters.git-tag}}'
+                    - name: timeout-seconds
+                      value: '{{workflow.parameters.wait-timeout-seconds}}'
+            - - name: generate-workload-cr
+                templateRef:
+                  name: generate-workload
+                  clusterScope: true
+                  template: generate-workload-cr
+                arguments:
+                  parameters:
+                    - name: image
+                      value: '{{steps.wait-for-image.outputs.parameters.image}}'
+                    - name: run-name
+                      value: '{{workflow.parameters.workflowrun-name}}'
+      volumeClaimTemplates:
+        - metadata:
+            name: workspace
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 1Gi
+  externalRefs:
+    - id: git-secret-reference
+      apiVersion: openchoreo.dev/v1alpha1
+      kind: SecretReference
+      name: ${parameters.repository.secretRef}
+  resources:
+    - id: git-secret
+      includeWhen: ${has(parameters.repository.secretRef) && parameters.repository.secretRef != ""}
+      template:
+        apiVersion: external-secrets.io/v1
+        kind: ExternalSecret
+        metadata:
+          name: ${metadata.workflowRunName}-git-secret
+          namespace: ${metadata.namespace}
+        spec:
+          refreshInterval: 15s
+          secretStoreRef:
+            kind: ClusterSecretStore
+            name: ${workflowplane.secretStore}
+          target:
+            name: ${metadata.workflowRunName}-git-secret
+            creationPolicy: Owner
+            template:
+              type: ${externalRefs['git-secret-reference'].spec.template.type}
+          data: |
+            ${externalRefs['git-secret-reference'].spec.data.map(secret, {
+              "secretKey": secret.secretKey,
+              "remoteRef": {
+                "key": secret.remoteRef.key,
+                "property": has(secret.remoteRef.property) && secret.remoteRef.property != "" ? secret.remoteRef.property : oc_omit()
+              }
+            })}
+    - id: workload-publisher-secret
+      template:
+        apiVersion: external-secrets.io/v1
+        kind: ExternalSecret
+        metadata:
+          name: ${metadata.workflowRunName}-workload-publisher-secret
+          namespace: ${metadata.namespace}
+        spec:
+          refreshInterval: 15s
+          secretStoreRef:
+            name: ${workflowplane.secretStore}
+            kind: ClusterSecretStore
+          target:
+            name: ${metadata.workflowRunName}-workload-publisher-secret
+            creationPolicy: Owner
+          data:
+            - secretKey: client-secret
+              remoteRef:
+                key: thunderid
+                property: workflows-client-secret

@@ -15,22 +15,14 @@ spec:
     name: deployment/web-application
   # Push to main -> GitHub webhook -> https://openchoreo.rpcu.io/api/v1alpha1/autobuild
   # (atlas https-external, only that path) -> openchoreo-api -> WorkflowRun.
+  # The image itself is built by GitHub Actions (chihiro's image.yaml, pushed
+  # to zot.rpcu.io/public/chihiro:<git tag or short SHA>); the run waits for it
+  # and publishes the workload.
   autoBuild: true
   workflow:
     kind: ClusterWorkflow
-    name: nix-builder
+    name: prebuilt-image
     parameters:
-      nix:
-        file: ./nix/oci.nix
-        # Tests already run in GitHub CI (nix-build.yaml); skipping the
-        # checkPhase here roughly halves the image build.
-        args:
-          - name: doCheck
-            value: 'false'
-          # Persistent Go build cache on the nix-store-cache PVC; see the
-          # nix-build ClusterWorkflowTemplate.
-          - name: goCacheDir
-            value: /nix-cache/go-build
       repository:
         url: https://github.com/RPCU/chihiro
         # appPath left unset (schema default "."): the autobuild webhook
@@ -38,8 +30,6 @@ spec:
         # matches none of them, so every push would be skipped.
         revision:
           branch: main
-      versionArgName: dockerVersion
-      revisionArgName: commit
   traits:
     # DragonflyDB instance shared by all replicas; Service
     # chihiro-session-store:6379 (see CHIHIRO_REDIS_ADDR in the bindings).
