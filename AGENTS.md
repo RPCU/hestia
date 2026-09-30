@@ -299,7 +299,9 @@ standard`: development → staging → {production, public}.
     extra HTTPRoute with explicit `hostnames` on a chosen Gateway listener
     (`gatewayName`/`gatewayNamespace`/`sectionName`, backend
     `<componentName>:port`), all per environment, off by default. For stable
-    names the web-application generated hostnames can't give.
+    names the web-application generated hostnames can't give. Labelled as the
+    `endpoint` (default `endpoint-1`, external) so the binding's
+    `status.endpoints` / portal link shows these hostnames, not the generated one.
   - **platform/traits/load-balancer.yaml** — namespaced `Trait/load-balancer`:
     Service type LoadBalancer (`loadBalancerIP`, `annotations`) + a
     NetworkPolicy admitting its `targetPort` from anywhere (OpenChoreo's

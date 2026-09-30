@@ -9,7 +9,11 @@
 #
 # Everything is per environment (traitEnvironmentConfigs in the ReleaseBinding),
 # since each environment lands on a different cluster/gateway. Disabled by
-# default. The Gateway must be in kgateway-system (the ClusterProjectType only
+# default. The route is labelled as the component's `endpoint` (external
+# visibility) so OpenChoreo's endpoint resolver reports these hostnames as the
+# endpoint URL (the portal link) instead of the generated one: the resolver
+# keeps the last route per endpoint+visibility, and trait resources render
+# after the ComponentType's. The Gateway must be in kgateway-system (the ClusterProjectType only
 # admits ingress from there) and its listener must cover the hostnames.
 #
 # Usage in a Component:
@@ -58,6 +62,10 @@ spec:
           type: integer
           default: 8080
           description: 'Port of the component Service to route to.'
+        endpoint:
+          type: string
+          default: 'endpoint-1'
+          description: 'Workload endpoint this route serves; its URL in the binding status (and the portal) becomes these hostnames.'
 
   creates:
     - targetPlane: dataplane
@@ -68,7 +76,7 @@ spec:
         metadata:
           name: ${metadata.name}-${trait.instanceName}
           namespace: ${metadata.namespace}
-          labels: ${metadata.labels}
+          labels: '${oc_merge(metadata.labels, {"openchoreo.dev/endpoint-name": environmentConfigs.endpoint, "openchoreo.dev/endpoint-visibility": "external"})}'
         spec:
           parentRefs:
             - name: ${environmentConfigs.gatewayName}
