@@ -22,6 +22,15 @@ spec:
     parameters:
       nix:
         file: ./nix/oci.nix
+        # Tests already run in GitHub CI (nix-build.yaml); skipping the
+        # checkPhase here roughly halves the image build.
+        args:
+          - name: doCheck
+            value: 'false'
+          # Persistent Go build cache on the nix-store-cache PVC; see the
+          # nix-build ClusterWorkflowTemplate.
+          - name: goCacheDir
+            value: /nix-cache/go-build
       repository:
         url: https://github.com/RPCU/chihiro
         # appPath left unset (schema default "."): the autobuild webhook
