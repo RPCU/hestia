@@ -267,6 +267,10 @@ spec:
                       label: "26.05-2"
                       constrain:
                         version: ["v1.36.1"]
+                    - value: "hephaestus-kaas-26.05-{{ chihiro.version }}"
+                      label: "26.05"
+                      constrain:
+                        version: ["v1.37.1", "v1.36.3"]
                   default: "hephaestus-kaas-26.05-{{ chihiro.version }}"
                   editable: true
                   path: "spec.topology.variables[2].value"
@@ -443,7 +447,7 @@ spec:
         - key: CHIHIRO_CREATOR_GROUPS
           value: 'kube-admin'
         - key: CHIHIRO_AVAILABLE_VERSIONS
-          value: 'v1.36.1,v1.35.4'
+          value: 'v1.36.1,v1.37.1,v1.36.3,v1.35.4'
         - key: CHIHIRO_MAX_CLUSTERS
           value: '5'
         - key: CHIHIRO_MAX_TOTAL_NODES
@@ -637,6 +641,10 @@ spec:
                       label: "26.05-2"
                       constrain:
                         version: ["v1.36.1"]
+                    - value: "hephaestus-kaas-26.05-{{ chihiro.version }}"
+                      label: "26.05"
+                      constrain:
+                        version: ["v1.37.1", "v1.36.3"]
                   default: "hephaestus-kaas-26.05-{{ chihiro.version }}"
                   editable: true
                   path: "spec.topology.variables[2].value"
@@ -829,7 +837,7 @@ spec:
         - key: CHIHIRO_CREATOR_GROUPS
           value: 'kube-admin'
         - key: CHIHIRO_AVAILABLE_VERSIONS
-          value: 'v1.36.1,v1.35.4'
+          value: 'v1.36.1,v1.37.1,v1.36.3,v1.35.4'
         - key: CHIHIRO_MAX_CLUSTERS
           value: '5'
         - key: CHIHIRO_MAX_TOTAL_NODES
@@ -1053,6 +1061,10 @@ spec:
                       label: "26.05-2"
                       constrain:
                         version: ["v1.36.1"]
+                    - value: "hephaestus-kaas-26.05-{{ chihiro.version }}"
+                      label: "26.05"
+                      constrain:
+                        version: ["v1.37.1", "v1.36.3"]
                   default: "hephaestus-kaas-26.05-{{ chihiro.version }}"
                   editable: true
                   path: "spec.topology.variables[2].value"
@@ -1283,7 +1295,7 @@ spec:
         - key: CHIHIRO_CREATOR_GROUPS
           value: 'kube-admin'
         - key: CHIHIRO_AVAILABLE_VERSIONS
-          value: 'v1.36.1,v1.35.4'
+          value: 'v1.36.1,v1.37.1,v1.36.3,v1.35.4'
         - key: CHIHIRO_MAX_CLUSTERS
           value: '5'
         - key: CHIHIRO_MAX_TOTAL_NODES
@@ -1508,6 +1520,10 @@ spec:
                       label: "26.05-2"
                       constrain:
                         version: ["v1.36.1"]
+                    - value: "hephaestus-kaas-26.05-{{ chihiro.version }}"
+                      label: "26.05"
+                      constrain:
+                        version: ["v1.37.1", "v1.36.3"]
                   default: "hephaestus-kaas-26.05-{{ chihiro.version }}"
                   editable: true
                   path: "spec.topology.variables[2].value"
@@ -1738,7 +1754,7 @@ spec:
         - key: CHIHIRO_CREATOR_GROUPS
           value: 'kube-admin'
         - key: CHIHIRO_AVAILABLE_VERSIONS
-          value: 'v1.36.1,v1.35.4'
+          value: 'v1.36.1,v1.37.1,v1.36.3,v1.35.4'
         - key: CHIHIRO_MAX_CLUSTERS
           value: '5'
         - key: CHIHIRO_MAX_TOTAL_NODES

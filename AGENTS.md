@@ -857,7 +857,10 @@ workflow-templates-gen`). Local edits are lost on the next regeneration — put
   `oidc-cluster-admin` + Kyverno, together with `oidc-rbac`). Clusters created
   elsewhere get the label by hand.
 - `imagename` options carry `constrain: {version: [...]}` bindings to the
-  Kubernetes versions in `CHIHIRO_AVAILABLE_VERSIONS` (`v1.36.1,v1.35.4`).
+  Kubernetes versions in `CHIHIRO_AVAILABLE_VERSIONS` (`v1.36.1,v1.37.1,v1.36.3,v1.35.4`;
+  the first is the default for new clusters). Each version needs a matching
+  `imagename` option (`constrain: version`) and Glance image, published by the
+  hephaestus CI as `hephaestus-kaas-<release>-v<k8s>`.
   Adding a version means updating both, plus the image names.
 - The `rbac/capi-viewer` trait grants **cluster create/update/patch/delete** on
   `cluster.x-k8s.io` — that is a genuine cluster-lifecycle privilege on the
@@ -879,7 +882,7 @@ onto a cluster whose infrastructure is owned by argus.
 
 ---
 
-**Last Updated**: 2026-09-30 — chihiro autobuild: `autoBuild: true`,
+**Last Updated**: 2026-10-04 — chihiro offers Kubernetes `v1.37.1` and `v1.36.3` (images `hephaestus-kaas-26.05-v<k8s>`; `v1.36.1` stays the default). Earlier: chihiro autobuild: `autoBuild: true`,
 `appPath` unset, `git-webhook-secrets` ExternalSecret; GitHub webhook reaches
 openchoreo-api through atlas's `openchoreo.rpcu.io` route. Earlier: DataPlanes as code (mgmt, production, test;
 clientCA from argus's shared agent CA), `public` environment (production
