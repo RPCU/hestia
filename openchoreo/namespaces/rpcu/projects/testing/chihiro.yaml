@@ -266,11 +266,7 @@ spec:
                     - value: "hephaestus-kaas-2-26.05-{{ chihiro.version }}"
                       label: "26.05-2"
                       constrain:
-                        version: ["v1.36.1"]
-                    - value: "hephaestus-kaas-26.05-{{ chihiro.version }}"
-                      label: "26.05"
-                      constrain:
-                        version: ["v1.37.1", "v1.36.3"]
+                        version: ["v1.37.1", "v1.36.3", "v1.36.1"]
                   default: "hephaestus-kaas-26.05-{{ chihiro.version }}"
                   editable: true
                   path: "spec.topology.variables[2].value"
@@ -640,11 +636,7 @@ spec:
                     - value: "hephaestus-kaas-2-26.05-{{ chihiro.version }}"
                       label: "26.05-2"
                       constrain:
-                        version: ["v1.36.1"]
-                    - value: "hephaestus-kaas-26.05-{{ chihiro.version }}"
-                      label: "26.05"
-                      constrain:
-                        version: ["v1.37.1", "v1.36.3"]
+                        version: ["v1.37.1", "v1.36.3", "v1.36.1"]
                   default: "hephaestus-kaas-26.05-{{ chihiro.version }}"
                   editable: true
                   path: "spec.topology.variables[2].value"
@@ -1060,11 +1052,7 @@ spec:
                     - value: "hephaestus-kaas-2-26.05-{{ chihiro.version }}"
                       label: "26.05-2"
                       constrain:
-                        version: ["v1.36.1"]
-                    - value: "hephaestus-kaas-26.05-{{ chihiro.version }}"
-                      label: "26.05"
-                      constrain:
-                        version: ["v1.37.1", "v1.36.3"]
+                        version: ["v1.37.1", "v1.36.3", "v1.36.1"]
                   default: "hephaestus-kaas-26.05-{{ chihiro.version }}"
                   editable: true
                   path: "spec.topology.variables[2].value"
@@ -1519,11 +1507,7 @@ spec:
                     - value: "hephaestus-kaas-2-26.05-{{ chihiro.version }}"
                       label: "26.05-2"
                       constrain:
-                        version: ["v1.36.1"]
-                    - value: "hephaestus-kaas-26.05-{{ chihiro.version }}"
-                      label: "26.05"
-                      constrain:
-                        version: ["v1.37.1", "v1.36.3"]
+                        version: ["v1.37.1", "v1.36.3", "v1.36.1"]
                   default: "hephaestus-kaas-26.05-{{ chihiro.version }}"
                   editable: true
                   path: "spec.topology.variables[2].value"
