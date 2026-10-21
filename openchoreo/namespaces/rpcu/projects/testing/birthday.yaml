@@ -17,7 +17,9 @@ spec:
   # https://openchoreo.rpcu.io/api/v1alpha1/autobuild -> WorkflowRun. The image
   # is built by GitHub Actions (birthday's image.yaml, pushed to
   # zot.rpcu.io/public/birthday:<git tag or short SHA>); the run waits for it
-  # and publishes the workload (default occ workload: endpoint-1, HTTP 8080).
+  # and publishes the workload from the repo's workload.yaml descriptor
+  # (endpoint-1, HTTP 8080). Without it occ emits no endpoint and the
+  # web-application ComponentType refuses to render.
   autoBuild: true
   workflow:
     kind: ClusterWorkflow

@@ -368,7 +368,7 @@ standard`: development → staging → {production, public}.
     `github.com/RPCU/birthday`. Same pipeline as chihiro: `autoBuild: true`
     + `prebuilt-image` (GitHub Actions `image.yaml` pushes
     `zot.rpcu.io/public/birthday:<git tag or short SHA>`; `appPath` unset for the
-    same webhook reason). Default occ workload (endpoint-1, HTTP 8080). Only
+    same webhook reason). Workload from the repo's `workload.yaml` descriptor (endpoint-1, HTTP 8080): without a descriptor occ emits **no endpoints** and the web-application validation fails with `RenderingFailed` ("must have at least one HTTP"). Only
     trait: `http-route/hostname`, serving `<name>.<domain>` where `<name>` is
     the recipient (set by hand next to `BIRTHDAY_NAME`, DNS-safe): staging
     `<name>.test.rpcu.lan`, production `<name>.mgmt.rpcu.lan` (https) and public
