@@ -382,7 +382,7 @@ standard`: development → staging → {production, public}.
     card), announced by `BIRTHDAY_SECRET_INTRO`. In production and public it's
     not in git: those bindings read it with `secretKeyRef` from OpenChoreo
     **portal-managed** secrets `birthday-production` (DataPlane `mgmt`) and
-    `birthday-public` (DataPlane `production`), keys `secret` and `pin` (`BIRTHDAY_SECRET_PIN`, required to reveal it; development/staging use demo `1234`) (Secrets >
+    `birthday-public` (DataPlane `production`), keys `secret` and `pin` (`BIRTHDAY_SECRET_PIN`, required to reveal it; development/staging use demo `1234`). production/public leave `BIRTHDAY_MESSAGE` and `BIRTHDAY_SECRET_INTRO` unset (app defaults); note the binding's `env` is an atomic list owned by Flux, so values added as portal env overrides are reverted on the next sync (Secrets >
     generic in the portal; the API writes Vault `secret/rpcu/generic/<name>`
     on that DataPlane and creates a SecretReference labelled
     `openchoreo.dev/managed-by: openchoreo-api`, like `chihiro-staging`).
@@ -911,7 +911,7 @@ onto a cluster whose infrastructure is owned by argus.
 
 ---
 
-**Last Updated**: 2026-10-21 — birthday's gift-card secret is PIN-guarded (`BIRTHDAY_SECRET_PIN`, portal key `pin` in production/public); mgmt DataPlane uses the dedicated `openchoreo-vault` secret store (portal secrets to mgmt got 403); birthday bindings right-sized (5m/32Mi → 100m/64Mi); birthday's hidden extra `BIRTHDAY_SECRET` comes from portal-managed OpenChoreo secrets in production/public (message back in git, production dated today); birthday bindings set `BIRTHDAY_TEASER` and `BIRTHDAY_OPEN_DAYS`; added the `birthday` component (projects/testing/birthday.yaml; countdown page, prebuilt-image pipeline like chihiro, `<name>.<domain>` hostnames). Earlier (2026-10-04): chihiro offers Kubernetes `v1.37.1` and `v1.36.3` (images `hephaestus-kaas-26.05-v<k8s>`; `v1.36.1` stays the default). Earlier: chihiro autobuild: `autoBuild: true`,
+**Last Updated**: 2026-10-21 — birthday production/public no longer set `BIRTHDAY_MESSAGE`/`BIRTHDAY_SECRET_INTRO` (app defaults); birthday's gift-card secret is PIN-guarded (`BIRTHDAY_SECRET_PIN`, portal key `pin` in production/public); mgmt DataPlane uses the dedicated `openchoreo-vault` secret store (portal secrets to mgmt got 403); birthday bindings right-sized (5m/32Mi → 100m/64Mi); birthday's hidden extra `BIRTHDAY_SECRET` comes from portal-managed OpenChoreo secrets in production/public (message back in git, production dated today); birthday bindings set `BIRTHDAY_TEASER` and `BIRTHDAY_OPEN_DAYS`; added the `birthday` component (projects/testing/birthday.yaml; countdown page, prebuilt-image pipeline like chihiro, `<name>.<domain>` hostnames). Earlier (2026-10-04): chihiro offers Kubernetes `v1.37.1` and `v1.36.3` (images `hephaestus-kaas-26.05-v<k8s>`; `v1.36.1` stays the default). Earlier: chihiro autobuild: `autoBuild: true`,
 `appPath` unset, `git-webhook-secrets` ExternalSecret; GitHub webhook reaches
 openchoreo-api through atlas's `openchoreo.rpcu.io` route. Earlier: DataPlanes as code (mgmt, production, test;
 clientCA from argus's shared agent CA), `public` environment (production

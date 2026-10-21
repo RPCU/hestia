@@ -214,11 +214,9 @@ spec:
         # Today, to preview the opened card (it stays open 15 days).
         - key: BIRTHDAY_DATE
           value: '10-21'
-        - key: BIRTHDAY_MESSAGE
-          value: 'I owe you a birthday drink'
-        # Announces the hidden extra on the opened card.
-        - key: BIRTHDAY_SECRET_INTRO
-          value: 'And an Uber gift card, so the ride is on me too'
+        # BIRTHDAY_MESSAGE and BIRTHDAY_SECRET_INTRO are deliberately unset
+        # here: the app falls back to its defaults ("I owe you a birthday
+        # drink" / "And a little extra, just for you").
         # The hidden extra (the Uber gift card), never in git: OpenChoreo secret
         # birthday-production (portal > Secrets), key "secret".
         - key: BIRTHDAY_SECRET
@@ -288,11 +286,9 @@ spec:
           value: 'Victor'
         - key: BIRTHDAY_DATE
           value: '10-31'
-        - key: BIRTHDAY_MESSAGE
-          value: 'I owe you a birthday drink'
-        # Announces the hidden extra on the opened card.
-        - key: BIRTHDAY_SECRET_INTRO
-          value: 'And an Uber gift card, so the ride is on me too'
+        # BIRTHDAY_MESSAGE and BIRTHDAY_SECRET_INTRO are deliberately unset
+        # here: the app falls back to its defaults ("I owe you a birthday
+        # drink" / "And a little extra, just for you").
         # The hidden extra (the Uber gift card), never in git: OpenChoreo secret
         # birthday-public (portal > Secrets), key "secret".
         - key: BIRTHDAY_SECRET
