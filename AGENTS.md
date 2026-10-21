@@ -362,6 +362,23 @@ standard`: development → staging → {production, public}.
     `mgmt` with the `sveltos.argus.rpcu.io/*` add-on labels and the
     `capo-version` annotation. Changing a toggle here without the matching
     ClusterProfile in argus produces a label nothing consumes.
+  - **projects/testing/birthday.yaml** — the `birthday` Component
+    (`deployment/web-application`): a one-page birthday countdown with an
+    "I owe you a birthday drink" I.O.U. card, from
+    `github.com/RPCU/birthday`. Same pipeline as chihiro: `autoBuild: true`
+    + `prebuilt-image` (GitHub Actions `image.yaml` pushes
+    `zot.rpcu.io/public/birthday:<git tag or short SHA>`; `appPath` unset for the
+    same webhook reason). Default occ workload (endpoint-1, HTTP 8080). Only
+    trait: `http-route/hostname`, serving `<name>.<domain>` where `<name>` is
+    the recipient (set by hand next to `BIRTHDAY_NAME`, DNS-safe): staging
+    `<name>.test.rpcu.lan`, production `<name>.mgmt.rpcu.lan` (https) and public
+    `<name>.rpcu.io` (https-external, 2 replicas). development keeps the
+    generated hostname (it shares the test gateway with staging). Watch for
+    clashes with other apps' names (e.g. `chihiro.rpcu.io`). No secrets, no auth, no storage: the page's
+    content is the `BIRTHDAY_*` env per binding (`NAME`, `DATE` MM-DD or
+    YYYY-MM-DD, `MESSAGE`, optional `FROM`, `TIMEZONE`, `HALLOWEEN`). The image's
+    default `Cmd` is `serve` (load-bearing, as for chihiro). It logs ERROR only
+    on real failures, so `default-error-rate` stays quiet.
 - **platform-shared/** — cluster-scoped OpenChoreo + Argo CRs.
   - `cluster-project-types/default.yaml` — `ClusterProjectType/standard`:
     the per-environment cell Namespace (labels/annotations from
@@ -882,7 +899,7 @@ onto a cluster whose infrastructure is owned by argus.
 
 ---
 
-**Last Updated**: 2026-10-04 — chihiro offers Kubernetes `v1.37.1` and `v1.36.3` (images `hephaestus-kaas-26.05-v<k8s>`; `v1.36.1` stays the default). Earlier: chihiro autobuild: `autoBuild: true`,
+**Last Updated**: 2026-10-21 — added the `birthday` component (projects/testing/birthday.yaml; countdown page, prebuilt-image pipeline like chihiro, `<name>.<domain>` hostnames). Earlier (2026-10-04): chihiro offers Kubernetes `v1.37.1` and `v1.36.3` (images `hephaestus-kaas-26.05-v<k8s>`; `v1.36.1` stays the default). Earlier: chihiro autobuild: `autoBuild: true`,
 `appPath` unset, `git-webhook-secrets` ExternalSecret; GitHub webhook reaches
 openchoreo-api through atlas's `openchoreo.rpcu.io` route. Earlier: DataPlanes as code (mgmt, production, test;
 clientCA from argus's shared agent CA), `public` environment (production

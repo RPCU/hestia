@@ -1,0 +1,199 @@
+apiVersion: openchoreo.dev/v1alpha1
+kind: Component
+metadata:
+  name: birthday
+  namespace: rpcu
+  annotations:
+    openchoreo.dev/display-name: 'Birthday'
+  labels:
+    openchoreo.dev/project: testing
+spec:
+  owner:
+    projectName: testing
+  componentType:
+    kind: ComponentType
+    name: deployment/web-application
+  # Same pipeline as chihiro: push to main -> GitHub webhook ->
+  # https://openchoreo.rpcu.io/api/v1alpha1/autobuild -> WorkflowRun. The image
+  # is built by GitHub Actions (birthday's image.yaml, pushed to
+  # zot.rpcu.io/public/birthday:<git tag or short SHA>); the run waits for it
+  # and publishes the workload (default occ workload: endpoint-1, HTTP 8080).
+  autoBuild: true
+  workflow:
+    kind: ClusterWorkflow
+    name: prebuilt-image
+    parameters:
+      repository:
+        url: https://github.com/RPCU/birthday
+        # appPath left unset on purpose, see chihiro.yaml.
+        revision:
+          branch: main
+  traits:
+    # The page is served at <name>.<domain>, <name> being the recipient
+    # (lowercase, DNS-safe: "Chloé" -> chloe) and <domain> the environment's
+    # gateway domain: test.rpcu.lan (staging), mgmt.rpcu.lan (production),
+    # rpcu.io (public). Set it in each ReleaseBinding, next to BIRTHDAY_NAME.
+    # development keeps OpenChoreo's generated hostname: it shares the
+    # test.rpcu.lan gateway with staging, so the same name would collide.
+    - kind: Trait
+      name: http-route
+      instanceName: hostname
+---
+# Everything the page says comes from the BIRTHDAY_* env vars below (see the
+# birthday README): who it is for, the date, the I.O.U. line and its
+# signature. They are repeated per binding so each environment can differ.
+apiVersion: openchoreo.dev/v1alpha1
+kind: ReleaseBinding
+metadata:
+  labels:
+    openchoreo.dev/name: birthday-development
+  name: birthday-development
+  namespace: rpcu
+spec:
+  owner:
+    projectName: testing
+    componentName: birthday
+  environment: development
+  traitEnvironmentConfigs:
+    hostname:
+      enabled: false
+      gatewayName: https
+      sectionName: https
+  workloadOverrides:
+    container:
+      env:
+        - key: BIRTHDAY_NAME # keep in sync with the hostname
+          value: 'Victor'
+        - key: BIRTHDAY_DATE
+          value: '10-31'
+        - key: BIRTHDAY_MESSAGE
+          value: 'I owe you a birthday drink'
+        # Optional signature under the line:
+        # - key: BIRTHDAY_FROM
+        #   value: 'Your name'
+        - key: BIRTHDAY_TIMEZONE
+          value: 'Europe/Paris'
+        - key: BIRTHDAY_HALLOWEEN
+          value: 'true'
+        - key: BIRTHDAY_PORT
+          value: '8080'
+---
+# releaseName is set by promotion (development -> staging), not in git.
+apiVersion: openchoreo.dev/v1alpha1
+kind: ReleaseBinding
+metadata:
+  labels:
+    openchoreo.dev/name: birthday-staging
+  name: birthday-staging
+  namespace: rpcu
+spec:
+  owner:
+    projectName: testing
+    componentName: birthday
+  environment: staging
+  traitEnvironmentConfigs:
+    hostname:
+      enabled: true
+      hostnames: ['victor.test.rpcu.lan'] # <name>.test.rpcu.lan
+      gatewayName: https
+      sectionName: https
+  workloadOverrides:
+    container:
+      env:
+        - key: BIRTHDAY_NAME # keep in sync with the hostname
+          value: 'Victor'
+        - key: BIRTHDAY_DATE
+          value: '10-31'
+        - key: BIRTHDAY_MESSAGE
+          value: 'I owe you a birthday drink'
+        # Optional signature under the line:
+        # - key: BIRTHDAY_FROM
+        #   value: 'Your name'
+        - key: BIRTHDAY_TIMEZONE
+          value: 'Europe/Paris'
+        - key: BIRTHDAY_HALLOWEEN
+          value: 'true'
+        - key: BIRTHDAY_PORT
+          value: '8080'
+---
+# Production: internal, on mgmt at <name>.mgmt.rpcu.lan.
+# releaseName is set by promotion (staging -> production), not in git.
+apiVersion: openchoreo.dev/v1alpha1
+kind: ReleaseBinding
+metadata:
+  labels:
+    openchoreo.dev/name: birthday-production
+  name: birthday-production
+  namespace: rpcu
+spec:
+  owner:
+    projectName: testing
+    componentName: birthday
+  environment: production
+  traitEnvironmentConfigs:
+    hostname:
+      enabled: true
+      hostnames: ['victor.mgmt.rpcu.lan'] # <name>.mgmt.rpcu.lan
+      gatewayName: https
+      sectionName: https
+  workloadOverrides:
+    container:
+      env:
+        - key: BIRTHDAY_NAME # keep in sync with the hostname
+          value: 'Victor'
+        - key: BIRTHDAY_DATE
+          value: '10-31'
+        - key: BIRTHDAY_MESSAGE
+          value: 'I owe you a birthday drink'
+        # Optional signature under the line:
+        # - key: BIRTHDAY_FROM
+        #   value: 'Your name'
+        - key: BIRTHDAY_TIMEZONE
+          value: 'Europe/Paris'
+        - key: BIRTHDAY_HALLOWEEN
+          value: 'true'
+        - key: BIRTHDAY_PORT
+          value: '8080'
+---
+# Public: on the production cluster, exposed on the internet at
+# <name>.rpcu.io (https-external gateway). No secrets: the app has no auth
+# and nothing to protect beyond what it displays.
+# releaseName is set by promotion (staging -> public), not in git.
+apiVersion: openchoreo.dev/v1alpha1
+kind: ReleaseBinding
+metadata:
+  labels:
+    openchoreo.dev/name: birthday-public
+  name: birthday-public
+  namespace: rpcu
+spec:
+  owner:
+    projectName: testing
+    componentName: birthday
+  environment: public
+  componentTypeEnvironmentConfigs:
+    replicas: 2
+  traitEnvironmentConfigs:
+    hostname:
+      enabled: true
+      hostnames: ['victor.rpcu.io'] # <name>.rpcu.io
+      gatewayName: https-external
+      sectionName: https
+  workloadOverrides:
+    container:
+      env:
+        - key: BIRTHDAY_NAME # keep in sync with the hostname
+          value: 'Victor'
+        - key: BIRTHDAY_DATE
+          value: '10-31'
+        - key: BIRTHDAY_MESSAGE
+          value: 'I owe you a birthday drink'
+        # Optional signature under the line:
+        # - key: BIRTHDAY_FROM
+        #   value: 'Your name'
+        - key: BIRTHDAY_TIMEZONE
+          value: 'Europe/Paris'
+        - key: BIRTHDAY_HALLOWEEN
+          value: 'true'
+        - key: BIRTHDAY_PORT
+          value: '8080'
