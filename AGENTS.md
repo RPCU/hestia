@@ -376,7 +376,7 @@ standard`: development → staging → {production, public}.
     generated hostname (it shares the test gateway with staging). Watch for
     clashes with other apps' names (e.g. `chihiro.rpcu.io`). No secrets, no auth, no storage: the page's
     content is the `BIRTHDAY_*` env per binding (`NAME`, `DATE` MM-DD or
-    YYYY-MM-DD, `MESSAGE`, optional `FROM`, `OPEN_DAYS` (the I.O.U. is hidden until the birthday, then shown for that many days, default 15), `TIMEZONE`, `HALLOWEEN`). The image's
+    YYYY-MM-DD, `MESSAGE`, optional `FROM`, `TEASER` (the generic gift-box line shown before it unlocks), `OPEN_DAYS` (the I.O.U. is hidden until the birthday, then shown for that many days, default 15), `TIMEZONE`, `HALLOWEEN`). The image's
     default `Cmd` is `serve` (load-bearing, as for chihiro). It logs ERROR only
     on real failures, so `default-error-rate` stays quiet.
 - **platform-shared/** — cluster-scoped OpenChoreo + Argo CRs.
@@ -899,7 +899,7 @@ onto a cluster whose infrastructure is owned by argus.
 
 ---
 
-**Last Updated**: 2026-10-21 — birthday bindings set `BIRTHDAY_OPEN_DAYS`; added the `birthday` component (projects/testing/birthday.yaml; countdown page, prebuilt-image pipeline like chihiro, `<name>.<domain>` hostnames). Earlier (2026-10-04): chihiro offers Kubernetes `v1.37.1` and `v1.36.3` (images `hephaestus-kaas-26.05-v<k8s>`; `v1.36.1` stays the default). Earlier: chihiro autobuild: `autoBuild: true`,
+**Last Updated**: 2026-10-21 — birthday bindings set `BIRTHDAY_TEASER` and `BIRTHDAY_OPEN_DAYS`; added the `birthday` component (projects/testing/birthday.yaml; countdown page, prebuilt-image pipeline like chihiro, `<name>.<domain>` hostnames). Earlier (2026-10-04): chihiro offers Kubernetes `v1.37.1` and `v1.36.3` (images `hephaestus-kaas-26.05-v<k8s>`; `v1.36.1` stays the default). Earlier: chihiro autobuild: `autoBuild: true`,
 `appPath` unset, `git-webhook-secrets` ExternalSecret; GitHub webhook reaches
 openchoreo-api through atlas's `openchoreo.rpcu.io` route. Earlier: DataPlanes as code (mgmt, production, test;
 clientCA from argus's shared agent CA), `public` environment (production
