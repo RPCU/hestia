@@ -375,19 +375,20 @@ standard`: development → staging → {production, public}.
     `<name>.rpcu.io` (https-external, 2 replicas). development keeps the
     generated hostname (it shares the test gateway with staging). Watch for
     clashes with other apps' names (e.g. `chihiro.rpcu.io`). No auth, no storage: the page's content is the `BIRTHDAY_*` env per binding
-    (`NAME`, `DATE` MM-DD or YYYY-MM-DD, `MESSAGE` **from a secret**, optional `FROM`, `TEASER` (the generic gift-box line shown before it unlocks), `OPEN_DAYS` (the I.O.U. is hidden until the birthday, then shown for that many days, default 15), `TIMEZONE`, `HALLOWEEN`). The image's
+    (`NAME`, `DATE` MM-DD or YYYY-MM-DD, `MESSAGE` (a secret in production/public), optional `FROM`, `TEASER` (the generic gift-box line shown before it unlocks), `OPEN_DAYS` (the I.O.U. is hidden until the birthday, then shown for that many days, default 15), `TIMEZONE`, `HALLOWEEN`). The image's
     default `Cmd` is `serve` (load-bearing, as for chihiro). It logs ERROR only
     on real failures, so `default-error-rate` stays quiet.
-    `BIRTHDAY_MESSAGE` (the hidden I.O.U. line) is never in git: each binding
-    reads it with `secretKeyRef` from an OpenChoreo **portal-managed** secret
-    `birthday-<env>`, key `message` (Secrets > generic in the portal; the API
-    writes Vault `secret/rpcu/generic/<name>` on the target DataPlane and
-    creates a SecretReference labelled `openchoreo.dev/managed-by:
-    openchoreo-api`, like `chihiro-staging`). Targets: development/staging →
-    `test`, production → `mgmt`, public → `production`. Don't declare those
-    SecretReferences in git (they're API-owned), and create the secret before
-    a binding references it: env refs have no `optional`, so a missing secret
-    blocks that environment's deployment.
+    In production and public, `BIRTHDAY_MESSAGE` (the hidden I.O.U. line) is
+    not in git: those bindings read it with `secretKeyRef` from OpenChoreo
+    **portal-managed** secrets `birthday-production` (DataPlane `mgmt`) and
+    `birthday-public` (DataPlane `production`), key `message` (Secrets >
+    generic in the portal; the API writes Vault `secret/rpcu/generic/<name>`
+    on that DataPlane and creates a SecretReference labelled
+    `openchoreo.dev/managed-by: openchoreo-api`, like `chihiro-staging`).
+    development and staging keep a plain value. Don't declare those
+    SecretReferences in git (they're API-owned), and create them before
+    promoting: env refs have no `optional`, so a missing secret blocks that
+    environment's deployment.
 - **platform-shared/** — cluster-scoped OpenChoreo + Argo CRs.
   - `cluster-project-types/default.yaml` — `ClusterProjectType/standard`:
     the per-environment cell Namespace (labels/annotations from
@@ -908,7 +909,7 @@ onto a cluster whose infrastructure is owned by argus.
 
 ---
 
-**Last Updated**: 2026-10-21 — birthday's `BIRTHDAY_MESSAGE` comes from portal-managed OpenChoreo secrets `birthday-<env>`; birthday bindings set `BIRTHDAY_TEASER` and `BIRTHDAY_OPEN_DAYS`; added the `birthday` component (projects/testing/birthday.yaml; countdown page, prebuilt-image pipeline like chihiro, `<name>.<domain>` hostnames). Earlier (2026-10-04): chihiro offers Kubernetes `v1.37.1` and `v1.36.3` (images `hephaestus-kaas-26.05-v<k8s>`; `v1.36.1` stays the default). Earlier: chihiro autobuild: `autoBuild: true`,
+**Last Updated**: 2026-10-21 — birthday's `BIRTHDAY_MESSAGE` comes from portal-managed OpenChoreo secrets in production/public; birthday bindings set `BIRTHDAY_TEASER` and `BIRTHDAY_OPEN_DAYS`; added the `birthday` component (projects/testing/birthday.yaml; countdown page, prebuilt-image pipeline like chihiro, `<name>.<domain>` hostnames). Earlier (2026-10-04): chihiro offers Kubernetes `v1.37.1` and `v1.36.3` (images `hephaestus-kaas-26.05-v<k8s>`; `v1.36.1` stays the default). Earlier: chihiro autobuild: `autoBuild: true`,
 `appPath` unset, `git-webhook-secrets` ExternalSecret; GitHub webhook reaches
 openchoreo-api through atlas's `openchoreo.rpcu.io` route. Earlier: DataPlanes as code (mgmt, production, test;
 clientCA from argus's shared agent CA), `public` environment (production
