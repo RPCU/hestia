@@ -43,17 +43,17 @@ spec:
 ---
 # Everything the page says comes from the BIRTHDAY_* env vars below (see the
 # birthday README), repeated per binding so each environment can differ.
-# In production and public, BIRTHDAY_MESSAGE (the hidden I.O.U. line) is the
-# exception: it is read from a per-environment OpenChoreo secret, created and
-# edited in the portal (Secrets > generic, written to Vault by openchoreo-api),
-# never from git:
+# BIRTHDAY_SECRET (a hidden extra revealed with the I.O.U., e.g. a gift card)
+# is the exception in production and public: it is read from a
+# per-environment OpenChoreo secret, created and edited in the portal
+# (Secrets > generic, written to Vault by openchoreo-api), never from git:
 #   birthday-production -> DataPlane mgmt
 #   birthday-public     -> DataPlane production
-# each with the key "message". Those SecretReferences are API-managed
+# each with the key "secret". Those SecretReferences are API-managed
 # (openchoreo.dev/managed-by: openchoreo-api), so they must not be added here.
 # Create them before promoting: a binding whose secret doesn't exist cannot
 # deploy (OpenChoreo env refs have no "optional"). development and staging
-# keep the line in git.
+# use a demo value.
 apiVersion: openchoreo.dev/v1alpha1
 kind: ReleaseBinding
 metadata:
@@ -78,9 +78,14 @@ spec:
           value: 'Victor'
         - key: BIRTHDAY_DATE
           value: '10-31'
-        # Non-production: the I.O.U. line can live in git.
         - key: BIRTHDAY_MESSAGE
           value: 'I owe you a birthday drink'
+        # Announces the hidden extra on the opened card.
+        - key: BIRTHDAY_SECRET_INTRO
+          value: 'And an Uber gift card, so the ride is on me too'
+        # Demo value outside production; the real one is a secret.
+        - key: BIRTHDAY_SECRET
+          value: 'DEMO-GIFT-CODE-1234'
         # Optional signature under the line:
         # - key: BIRTHDAY_FROM
         #   value: 'Your name'
@@ -123,9 +128,14 @@ spec:
           value: 'Victor'
         - key: BIRTHDAY_DATE
           value: '10-31'
-        # Non-production: the I.O.U. line can live in git.
         - key: BIRTHDAY_MESSAGE
           value: 'I owe you a birthday drink'
+        # Announces the hidden extra on the opened card.
+        - key: BIRTHDAY_SECRET_INTRO
+          value: 'And an Uber gift card, so the ride is on me too'
+        # Demo value outside production; the real one is a secret.
+        - key: BIRTHDAY_SECRET
+          value: 'DEMO-GIFT-CODE-1234'
         # Optional signature under the line:
         # - key: BIRTHDAY_FROM
         #   value: 'Your name'
@@ -167,16 +177,21 @@ spec:
       env:
         - key: BIRTHDAY_NAME # keep in sync with the hostname
           value: 'Victor'
+        # Today, to preview the opened card (it stays open 15 days).
         - key: BIRTHDAY_DATE
-          value: '10-31'
-        # The I.O.U. line is a surprise, so it is not in git: it comes from the
-        # OpenChoreo secret birthday-production (portal > Secrets; stored in Vault),
-        # key "message".
+          value: '10-21'
         - key: BIRTHDAY_MESSAGE
+          value: 'I owe you a birthday drink'
+        # Announces the hidden extra on the opened card.
+        - key: BIRTHDAY_SECRET_INTRO
+          value: 'And an Uber gift card, so the ride is on me too'
+        # The hidden extra (the Uber gift card), never in git: OpenChoreo secret
+        # birthday-production (portal > Secrets), key "secret".
+        - key: BIRTHDAY_SECRET
           valueFrom:
             secretKeyRef:
               name: birthday-production
-              key: message
+              key: secret
         # Optional signature under the line:
         # - key: BIRTHDAY_FROM
         #   value: 'Your name'
@@ -224,14 +239,18 @@ spec:
           value: 'Victor'
         - key: BIRTHDAY_DATE
           value: '10-31'
-        # The I.O.U. line is a surprise, so it is not in git: it comes from the
-        # OpenChoreo secret birthday-public (portal > Secrets; stored in Vault),
-        # key "message".
         - key: BIRTHDAY_MESSAGE
+          value: 'I owe you a birthday drink'
+        # Announces the hidden extra on the opened card.
+        - key: BIRTHDAY_SECRET_INTRO
+          value: 'And an Uber gift card, so the ride is on me too'
+        # The hidden extra (the Uber gift card), never in git: OpenChoreo secret
+        # birthday-public (portal > Secrets), key "secret".
+        - key: BIRTHDAY_SECRET
           valueFrom:
             secretKeyRef:
               name: birthday-public
-              key: message
+              key: secret
         # Optional signature under the line:
         # - key: BIRTHDAY_FROM
         #   value: 'Your name'
