@@ -372,7 +372,7 @@ standard`: development → staging → {production, public}.
     trait: `http-route/hostname`, serving `<name>.<domain>` where `<name>` is
     the recipient (set by hand next to `BIRTHDAY_NAME`, DNS-safe): staging
     `<name>.test.rpcu.lan`, production `<name>.mgmt.rpcu.lan` (https) and public
-    `<name>.rpcu.io` (https-external, 2 replicas). development keeps the
+    `<name>.rpcu.io` (https-external, 2 replicas). Every binding sets explicit `resources` (5m/32Mi requests, 100m/64Mi limits): the web-application defaults (100m/256Mi) left no room on the single-node test cluster for a rollout's surge pod. development keeps the
     generated hostname (it shares the test gateway with staging). Watch for
     clashes with other apps' names (e.g. `chihiro.rpcu.io`). No auth, no storage: the page's content is the `BIRTHDAY_*` env per binding
     (`NAME`, `DATE` MM-DD or YYYY-MM-DD, `MESSAGE`, `SECRET` (a secret in production/public) + `SECRET_INTRO`, optional `FROM`, `TEASER` (the generic gift-box line shown before it unlocks), `OPEN_DAYS` (the I.O.U. is hidden until the birthday, then shown for that many days, default 15), `TIMEZONE`, `HALLOWEEN`). The image's
@@ -911,7 +911,7 @@ onto a cluster whose infrastructure is owned by argus.
 
 ---
 
-**Last Updated**: 2026-10-21 — birthday's hidden extra `BIRTHDAY_SECRET` comes from portal-managed OpenChoreo secrets in production/public (message back in git, production dated today); birthday bindings set `BIRTHDAY_TEASER` and `BIRTHDAY_OPEN_DAYS`; added the `birthday` component (projects/testing/birthday.yaml; countdown page, prebuilt-image pipeline like chihiro, `<name>.<domain>` hostnames). Earlier (2026-10-04): chihiro offers Kubernetes `v1.37.1` and `v1.36.3` (images `hephaestus-kaas-26.05-v<k8s>`; `v1.36.1` stays the default). Earlier: chihiro autobuild: `autoBuild: true`,
+**Last Updated**: 2026-10-21 — birthday bindings right-sized (5m/32Mi → 100m/64Mi); birthday's hidden extra `BIRTHDAY_SECRET` comes from portal-managed OpenChoreo secrets in production/public (message back in git, production dated today); birthday bindings set `BIRTHDAY_TEASER` and `BIRTHDAY_OPEN_DAYS`; added the `birthday` component (projects/testing/birthday.yaml; countdown page, prebuilt-image pipeline like chihiro, `<name>.<domain>` hostnames). Earlier (2026-10-04): chihiro offers Kubernetes `v1.37.1` and `v1.36.3` (images `hephaestus-kaas-26.05-v<k8s>`; `v1.36.1` stays the default). Earlier: chihiro autobuild: `autoBuild: true`,
 `appPath` unset, `git-webhook-secrets` ExternalSecret; GitHub webhook reaches
 openchoreo-api through atlas's `openchoreo.rpcu.io` route. Earlier: DataPlanes as code (mgmt, production, test;
 clientCA from argus's shared agent CA), `public` environment (production
