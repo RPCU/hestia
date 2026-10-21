@@ -75,6 +75,9 @@ spec:
         #   value: 'Your name'
         - key: BIRTHDAY_TIMEZONE
           value: 'Europe/Paris'
+        # Days the I.O.U. stays visible after the birthday (hidden before it).
+        - key: BIRTHDAY_OPEN_DAYS
+          value: '15'
         - key: BIRTHDAY_HALLOWEEN
           value: 'true'
         - key: BIRTHDAY_PORT
@@ -113,6 +116,9 @@ spec:
         #   value: 'Your name'
         - key: BIRTHDAY_TIMEZONE
           value: 'Europe/Paris'
+        # Days the I.O.U. stays visible after the birthday (hidden before it).
+        - key: BIRTHDAY_OPEN_DAYS
+          value: '15'
         - key: BIRTHDAY_HALLOWEEN
           value: 'true'
         - key: BIRTHDAY_PORT
@@ -152,6 +158,9 @@ spec:
         #   value: 'Your name'
         - key: BIRTHDAY_TIMEZONE
           value: 'Europe/Paris'
+        # Days the I.O.U. stays visible after the birthday (hidden before it).
+        - key: BIRTHDAY_OPEN_DAYS
+          value: '15'
         - key: BIRTHDAY_HALLOWEEN
           value: 'true'
         - key: BIRTHDAY_PORT
@@ -195,6 +204,9 @@ spec:
         #   value: 'Your name'
         - key: BIRTHDAY_TIMEZONE
           value: 'Europe/Paris'
+        # Days the I.O.U. stays visible after the birthday (hidden before it).
+        - key: BIRTHDAY_OPEN_DAYS
+          value: '15'
         - key: BIRTHDAY_HALLOWEEN
           value: 'true'
         - key: BIRTHDAY_PORT
