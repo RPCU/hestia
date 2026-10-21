@@ -75,6 +75,9 @@ spec:
         #   value: 'Your name'
         - key: BIRTHDAY_TIMEZONE
           value: 'Europe/Paris'
+        # Shown in the I.O.U.'s place until it unlocks.
+        - key: BIRTHDAY_TEASER
+          value: 'A little something is waiting for you'
         # Days the I.O.U. stays visible after the birthday (hidden before it).
         - key: BIRTHDAY_OPEN_DAYS
           value: '15'
@@ -116,6 +119,9 @@ spec:
         #   value: 'Your name'
         - key: BIRTHDAY_TIMEZONE
           value: 'Europe/Paris'
+        # Shown in the I.O.U.'s place until it unlocks.
+        - key: BIRTHDAY_TEASER
+          value: 'A little something is waiting for you'
         # Days the I.O.U. stays visible after the birthday (hidden before it).
         - key: BIRTHDAY_OPEN_DAYS
           value: '15'
@@ -158,6 +164,9 @@ spec:
         #   value: 'Your name'
         - key: BIRTHDAY_TIMEZONE
           value: 'Europe/Paris'
+        # Shown in the I.O.U.'s place until it unlocks.
+        - key: BIRTHDAY_TEASER
+          value: 'A little something is waiting for you'
         # Days the I.O.U. stays visible after the birthday (hidden before it).
         - key: BIRTHDAY_OPEN_DAYS
           value: '15'
@@ -204,6 +213,9 @@ spec:
         #   value: 'Your name'
         - key: BIRTHDAY_TIMEZONE
           value: 'Europe/Paris'
+        # Shown in the I.O.U.'s place until it unlocks.
+        - key: BIRTHDAY_TEASER
+          value: 'A little something is waiting for you'
         # Days the I.O.U. stays visible after the birthday (hidden before it).
         - key: BIRTHDAY_OPEN_DAYS
           value: '15'
