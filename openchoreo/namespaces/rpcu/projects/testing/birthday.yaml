@@ -49,7 +49,7 @@ spec:
 # (Secrets > generic, written to Vault by openchoreo-api), never from git:
 #   birthday-production -> DataPlane mgmt
 #   birthday-public     -> DataPlane production
-# each with the key "secret". Those SecretReferences are API-managed
+# each with the keys "secret" and "pin" (BIRTHDAY_SECRET_PIN, needed to reveal it). Those SecretReferences are API-managed
 # (openchoreo.dev/managed-by: openchoreo-api), so they must not be added here.
 # Create them before promoting: a binding whose secret doesn't exist cannot
 # deploy (OpenChoreo env refs have no "optional"). development and staging
@@ -96,6 +96,8 @@ spec:
         # Demo value outside production; the real one is a secret.
         - key: BIRTHDAY_SECRET
           value: 'DEMO-GIFT-CODE-1234'
+        - key: BIRTHDAY_SECRET_PIN
+          value: '1234'
         # Optional signature under the line:
         # - key: BIRTHDAY_FROM
         #   value: 'Your name'
@@ -156,6 +158,8 @@ spec:
         # Demo value outside production; the real one is a secret.
         - key: BIRTHDAY_SECRET
           value: 'DEMO-GIFT-CODE-1234'
+        - key: BIRTHDAY_SECRET_PIN
+          value: '1234'
         # Optional signature under the line:
         # - key: BIRTHDAY_FROM
         #   value: 'Your name'
@@ -222,6 +226,12 @@ spec:
             secretKeyRef:
               name: birthday-production
               key: secret
+        # PIN to reveal it, from the same portal secret (key "pin").
+        - key: BIRTHDAY_SECRET_PIN
+          valueFrom:
+            secretKeyRef:
+              name: birthday-production
+              key: pin
         # Optional signature under the line:
         # - key: BIRTHDAY_FROM
         #   value: 'Your name'
@@ -290,6 +300,12 @@ spec:
             secretKeyRef:
               name: birthday-public
               key: secret
+        # PIN to reveal it, from the same portal secret (key "pin").
+        - key: BIRTHDAY_SECRET_PIN
+          valueFrom:
+            secretKeyRef:
+              name: birthday-public
+              key: pin
         # Optional signature under the line:
         # - key: BIRTHDAY_FROM
         #   value: 'Your name'
