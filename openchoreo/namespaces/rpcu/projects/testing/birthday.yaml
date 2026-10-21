@@ -181,6 +181,13 @@ spec:
 apiVersion: openchoreo.dev/v1alpha1
 kind: ReleaseBinding
 metadata:
+  annotations:
+    # The web UI owns this binding: Flux creates it if missing but never
+    # updates it, so env vars and promotions set in the portal stick (the env
+    # list is atomic, so Flux would otherwise replace it every sync). Git
+    # edits below no longer reach the live object; apply them by hand or in
+    # the portal.
+    kustomize.toolkit.fluxcd.io/ssa: IfNotPresent
   labels:
     openchoreo.dev/name: birthday-production
   name: birthday-production
@@ -247,6 +254,13 @@ spec:
 apiVersion: openchoreo.dev/v1alpha1
 kind: ReleaseBinding
 metadata:
+  annotations:
+    # The web UI owns this binding: Flux creates it if missing but never
+    # updates it, so env vars and promotions set in the portal stick (the env
+    # list is atomic, so Flux would otherwise replace it every sync). Git
+    # edits below no longer reach the live object; apply them by hand or in
+    # the portal.
+    kustomize.toolkit.fluxcd.io/ssa: IfNotPresent
   labels:
     openchoreo.dev/name: birthday-public
   name: birthday-public
