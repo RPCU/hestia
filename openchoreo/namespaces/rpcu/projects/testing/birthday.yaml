@@ -209,14 +209,11 @@ spec:
   workloadOverrides:
     container:
       env:
-        - key: BIRTHDAY_NAME # keep in sync with the hostname
-          value: 'Victor'
-        # Today, to preview the opened card (it stays open 15 days).
-        - key: BIRTHDAY_DATE
-          value: '10-21'
-        # BIRTHDAY_MESSAGE and BIRTHDAY_SECRET_INTRO are deliberately unset
-        # here: the app falls back to its defaults ("I owe you a birthday
-        # drink" / "And a little extra, just for you").
+        # BIRTHDAY_NAME, BIRTHDAY_DATE, BIRTHDAY_TEASER, BIRTHDAY_MESSAGE and
+        # BIRTHDAY_SECRET_INTRO are deliberately unset here: the app falls back
+        # to its defaults ("friend", January 1, "A little something is waiting
+        # for you", "I owe you a birthday drink", "And a little extra, just
+        # for you").
         # The hidden extra (the Uber gift card), never in git: OpenChoreo secret
         # birthday-production (portal > Secrets), key "secret".
         - key: BIRTHDAY_SECRET
@@ -235,9 +232,6 @@ spec:
         #   value: 'Your name'
         - key: BIRTHDAY_TIMEZONE
           value: 'Europe/Paris'
-        # Shown in the I.O.U.'s place until it unlocks.
-        - key: BIRTHDAY_TEASER
-          value: 'A little something is waiting for you'
         # Days the I.O.U. stays visible after the birthday (hidden before it).
         - key: BIRTHDAY_OPEN_DAYS
           value: '15'
@@ -282,13 +276,11 @@ spec:
   workloadOverrides:
     container:
       env:
-        - key: BIRTHDAY_NAME # keep in sync with the hostname
-          value: 'Victor'
-        - key: BIRTHDAY_DATE
-          value: '10-31'
-        # BIRTHDAY_MESSAGE and BIRTHDAY_SECRET_INTRO are deliberately unset
-        # here: the app falls back to its defaults ("I owe you a birthday
-        # drink" / "And a little extra, just for you").
+        # BIRTHDAY_NAME, BIRTHDAY_DATE, BIRTHDAY_TEASER, BIRTHDAY_MESSAGE and
+        # BIRTHDAY_SECRET_INTRO are deliberately unset here: the app falls back
+        # to its defaults ("friend", January 1, "A little something is waiting
+        # for you", "I owe you a birthday drink", "And a little extra, just
+        # for you").
         # The hidden extra (the Uber gift card), never in git: OpenChoreo secret
         # birthday-public (portal > Secrets), key "secret".
         - key: BIRTHDAY_SECRET
@@ -307,9 +299,6 @@ spec:
         #   value: 'Your name'
         - key: BIRTHDAY_TIMEZONE
           value: 'Europe/Paris'
-        # Shown in the I.O.U.'s place until it unlocks.
-        - key: BIRTHDAY_TEASER
-          value: 'A little something is waiting for you'
         # Days the I.O.U. stays visible after the birthday (hidden before it).
         - key: BIRTHDAY_OPEN_DAYS
           value: '15'
