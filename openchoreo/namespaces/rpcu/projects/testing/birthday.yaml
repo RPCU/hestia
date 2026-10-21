@@ -42,8 +42,17 @@ spec:
       instanceName: hostname
 ---
 # Everything the page says comes from the BIRTHDAY_* env vars below (see the
-# birthday README): who it is for, the date, the I.O.U. line and its
-# signature. They are repeated per binding so each environment can differ.
+# birthday README), repeated per binding so each environment can differ.
+# BIRTHDAY_MESSAGE (the hidden I.O.U. line) is the exception: it is read from
+# a per-environment OpenChoreo secret, created and edited in the portal
+# (Secrets > generic, written to Vault by openchoreo-api), never from git:
+#   birthday-development, birthday-staging -> DataPlane test
+#   birthday-production -> DataPlane mgmt
+#   birthday-public     -> DataPlane production
+# each with the key "message". Those SecretReferences are API-managed
+# (openchoreo.dev/managed-by: openchoreo-api), so they must not be added here.
+# A binding whose secret doesn't exist yet cannot deploy (OpenChoreo env refs
+# have no "optional").
 apiVersion: openchoreo.dev/v1alpha1
 kind: ReleaseBinding
 metadata:
@@ -68,8 +77,14 @@ spec:
           value: 'Victor'
         - key: BIRTHDAY_DATE
           value: '10-31'
+        # The I.O.U. line is a surprise, so it is not in git: it comes from the
+        # OpenChoreo secret birthday-development (portal > Secrets; stored in Vault),
+        # key "message".
         - key: BIRTHDAY_MESSAGE
-          value: 'I owe you a birthday drink'
+          valueFrom:
+            secretKeyRef:
+              name: birthday-development
+              key: message
         # Optional signature under the line:
         # - key: BIRTHDAY_FROM
         #   value: 'Your name'
@@ -112,8 +127,14 @@ spec:
           value: 'Victor'
         - key: BIRTHDAY_DATE
           value: '10-31'
+        # The I.O.U. line is a surprise, so it is not in git: it comes from the
+        # OpenChoreo secret birthday-staging (portal > Secrets; stored in Vault),
+        # key "message".
         - key: BIRTHDAY_MESSAGE
-          value: 'I owe you a birthday drink'
+          valueFrom:
+            secretKeyRef:
+              name: birthday-staging
+              key: message
         # Optional signature under the line:
         # - key: BIRTHDAY_FROM
         #   value: 'Your name'
@@ -157,8 +178,14 @@ spec:
           value: 'Victor'
         - key: BIRTHDAY_DATE
           value: '10-31'
+        # The I.O.U. line is a surprise, so it is not in git: it comes from the
+        # OpenChoreo secret birthday-production (portal > Secrets; stored in Vault),
+        # key "message".
         - key: BIRTHDAY_MESSAGE
-          value: 'I owe you a birthday drink'
+          valueFrom:
+            secretKeyRef:
+              name: birthday-production
+              key: message
         # Optional signature under the line:
         # - key: BIRTHDAY_FROM
         #   value: 'Your name'
@@ -206,8 +233,14 @@ spec:
           value: 'Victor'
         - key: BIRTHDAY_DATE
           value: '10-31'
+        # The I.O.U. line is a surprise, so it is not in git: it comes from the
+        # OpenChoreo secret birthday-public (portal > Secrets; stored in Vault),
+        # key "message".
         - key: BIRTHDAY_MESSAGE
-          value: 'I owe you a birthday drink'
+          valueFrom:
+            secretKeyRef:
+              name: birthday-public
+              key: message
         # Optional signature under the line:
         # - key: BIRTHDAY_FROM
         #   value: 'Your name'
