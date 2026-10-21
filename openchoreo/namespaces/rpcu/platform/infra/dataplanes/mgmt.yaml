@@ -25,8 +25,12 @@ spec:
         https:
           host: mgmt.rpcu.lan
           port: 443
+  # Dedicated store (argus clusters/mgmt/crossplane/vault/openchoreo-secrets.yaml):
+  # mgmt's shared vault-backend uses a hand-made read-only Vault role, so portal
+  # secret pushes to this DataPlane got 403. openchoreo-vault can write
+  # secret/<ns>/generic/* and read chihiro's pushed `chihiro` key.
   secretStoreRef:
-    name: vault-backend
+    name: openchoreo-vault
   observabilityPlaneRef:
     kind: ClusterObservabilityPlane
     name: default
