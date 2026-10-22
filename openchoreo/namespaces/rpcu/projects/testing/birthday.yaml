@@ -40,6 +40,14 @@ spec:
     - kind: Trait
       name: http-route
       instanceName: hostname
+    # Keeps the chat friend's Claude Code login (`claude auth login`) across
+    # restarts and redeploys. Per environment (traitEnvironmentConfigs.claude):
+    # ReadWriteOnce, so only where replicas is 1 (not public).
+    - kind: Trait
+      name: persistent-volume
+      instanceName: claude
+      parameters:
+        mountPath: /home/birthday/.claude
 ---
 # Everything the page says comes from the BIRTHDAY_* env vars below (see the
 # birthday README), repeated per binding so each environment can differ.
@@ -68,20 +76,23 @@ spec:
   environment: development
   componentTypeEnvironmentConfigs:
     # Stdlib Go page using ~10-20Mi, plus the chat friend: each reply runs a
-    # ~250Mi Claude Code, two at most at once. Requests stay small so the
+    # ~250Mi Claude Code, two at most at once, and it starts too slowly for the
+    # gateway on 1 CPU. Requests stay small so the
     # single-node test cluster keeps room for the rollout's surge pod.
     resources:
       requests:
         cpu: 5m
         memory: 32Mi
       limits:
-        cpu: '1'
+        cpu: '2'
         memory: 640Mi
   traitEnvironmentConfigs:
     hostname:
       enabled: false
       gatewayName: https
       sectionName: https
+    claude:
+      enabled: true
   workloadOverrides:
     container:
       env:
@@ -140,14 +151,15 @@ spec:
   environment: staging
   componentTypeEnvironmentConfigs:
     # Stdlib Go page using ~10-20Mi, plus the chat friend: each reply runs a
-    # ~250Mi Claude Code, two at most at once. Requests stay small so the
+    # ~250Mi Claude Code, two at most at once, and it starts too slowly for the
+    # gateway on 1 CPU. Requests stay small so the
     # single-node test cluster keeps room for the rollout's surge pod.
     resources:
       requests:
         cpu: 5m
         memory: 32Mi
       limits:
-        cpu: '1'
+        cpu: '2'
         memory: 640Mi
   traitEnvironmentConfigs:
     hostname:
@@ -155,6 +167,8 @@ spec:
       hostnames: ['victor.test.rpcu.lan'] # <name>.test.rpcu.lan
       gatewayName: https
       sectionName: https
+    claude:
+      enabled: true
   workloadOverrides:
     container:
       env:
@@ -235,6 +249,9 @@ spec:
       hostnames: ['victor.mgmt.rpcu.lan'] # <name>.mgmt.rpcu.lan
       gatewayName: https
       sectionName: https
+    # Portal-owned binding: set this in the portal too (git doesn't reach it).
+    claude:
+      enabled: true
   workloadOverrides:
     container:
       env:
@@ -269,8 +286,9 @@ spec:
         # The chat friend (off by default): BIRTHDAY_CHAT 'true', with
         # BIRTHDAY_CHAT_NAME / BIRTHDAY_CHAT_PROMPT, CLAUDE_CODE_OAUTH_TOKEN
         # (claude setup-token) from this environment's portal secret so every
-        # replica is signed in across restarts, and limits raised to
-        # cpu 1 / memory 640Mi (see staging).
+        # replica is signed in across restarts (or, with one replica, the
+        # claude volume: traitEnvironmentConfigs.claude.enabled), and limits
+        # raised to cpu 2 / memory 640Mi (see staging).
         - key: BIRTHDAY_PORT
           value: '8080'
 ---
@@ -348,7 +366,8 @@ spec:
         # The chat friend (off by default): BIRTHDAY_CHAT 'true', with
         # BIRTHDAY_CHAT_NAME / BIRTHDAY_CHAT_PROMPT, CLAUDE_CODE_OAUTH_TOKEN
         # (claude setup-token) from this environment's portal secret so every
-        # replica is signed in across restarts, and limits raised to
-        # cpu 1 / memory 640Mi (see staging).
+        # replica is signed in across restarts (or, with one replica, the
+        # claude volume: traitEnvironmentConfigs.claude.enabled), and limits
+        # raised to cpu 2 / memory 640Mi (see staging).
         - key: BIRTHDAY_PORT
           value: '8080'
