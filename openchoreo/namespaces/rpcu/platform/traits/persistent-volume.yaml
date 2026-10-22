@@ -1,0 +1,114 @@
+# Trait for giving a component a persistent volume.
+# Namespace-scoped: available to Components in the rpcu namespace.
+#
+# Creates a PersistentVolumeClaim and mounts it into the main container, so
+# what the component writes there survives restarts and redeploys (the claim
+# keeps its name across releases of the same environment).
+#
+# The volume is ReadWriteOnce, so the Deployment switches to the Recreate
+# strategy: a surge pod on another node could never attach it, and the
+# rollout would hang. Expect a short gap on each deploy, and keep replicas at
+# 1. fsGroup makes the volume writable for the image's non-root user.
+#
+# Per environment and disabled by default (environmentConfigs.enabled in the
+# ReleaseBinding's traitEnvironmentConfigs). The patches use a one-item
+# forEach as their condition: patches have no includeWhen.
+#
+# Used by birthday to keep the chat friend's Claude Code login
+# (`claude auth login`) in /home/birthday/.claude.
+#
+# Usage in a Component:
+#   traits:
+#     - kind: Trait
+#       name: persistent-volume
+#       instanceName: claude
+#       parameters:
+#         mountPath: /home/birthday/.claude
+# and in a ReleaseBinding:
+#   traitEnvironmentConfigs:
+#     claude:
+#       enabled: true
+apiVersion: openchoreo.dev/v1alpha1
+kind: Trait
+metadata:
+  name: persistent-volume
+  namespace: rpcu
+spec:
+  environmentConfigs:
+    openAPIV3Schema:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          default: false
+          description: 'Create and mount the volume in this environment.'
+
+  parameters:
+    openAPIV3Schema:
+      type: object
+      properties:
+        mountPath:
+          type: string
+          description: 'Where the volume is mounted in the main container.'
+        size:
+          type: string
+          default: 1Gi
+          description: 'Requested capacity.'
+        storageClassName:
+          type: string
+          default: ''
+          description: "StorageClass; empty uses the dataplane's default."
+        fsGroup:
+          type: integer
+          default: 1001
+          description: 'Group given write access to the volume (the pod securityContext fsGroup).'
+      required:
+        - mountPath
+
+  creates:
+    - targetPlane: dataplane
+      includeWhen: ${environmentConfigs.enabled}
+      template:
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        metadata:
+          name: ${metadata.name}-${trait.instanceName}
+          namespace: ${metadata.namespace}
+          labels: ${metadata.labels}
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          storageClassName: |
+            ${parameters.storageClassName != "" ? parameters.storageClassName : oc_omit()}
+          resources:
+            requests:
+              storage: ${parameters.size}
+
+  patches:
+    - target:
+        group: apps
+        version: v1
+        kind: Deployment
+      targetPlane: dataplane
+      forEach: '${environmentConfigs.enabled ? [trait.instanceName] : []}'
+      var: volume
+      operations:
+        - op: add
+          path: /spec/template/spec/volumes/-
+          value:
+            name: ${volume}
+            persistentVolumeClaim:
+              claimName: ${metadata.name}-${trait.instanceName}
+        - op: add
+          path: /spec/template/spec/containers/0/volumeMounts/-
+          value:
+            name: ${volume}
+            mountPath: ${parameters.mountPath}
+        - op: add
+          path: /spec/template/spec/securityContext
+          value:
+            fsGroup: ${parameters.fsGroup}
+        - op: add
+          path: /spec/strategy
+          value:
+            type: Recreate
