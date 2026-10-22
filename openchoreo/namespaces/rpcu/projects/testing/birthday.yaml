@@ -67,15 +67,16 @@ spec:
     componentName: birthday
   environment: development
   componentTypeEnvironmentConfigs:
-    # Stdlib Go page using ~10-20Mi: the web-application defaults (100m/256Mi)
-    # left no room on the single-node test cluster for the rollout's surge pod.
+    # Stdlib Go page using ~10-20Mi, plus the chat friend: each reply runs a
+    # ~250Mi Claude Code, two at most at once. Requests stay small so the
+    # single-node test cluster keeps room for the rollout's surge pod.
     resources:
       requests:
         cpu: 5m
         memory: 32Mi
       limits:
-        cpu: 100m
-        memory: 64Mi
+        cpu: '1'
+        memory: 640Mi
   traitEnvironmentConfigs:
     hostname:
       enabled: false
@@ -111,6 +112,16 @@ spec:
           value: '15'
         - key: BIRTHDAY_HALLOWEEN
           value: 'true'
+        # The chat friend on the opened card, locked by the PIN above. Sign
+        # Claude Code in once per pod: kubectl exec -it <pod> -- claude auth login
+        # (lost when the pod restarts).
+        - key: BIRTHDAY_CHAT
+          value: 'true'
+        - key: BIRTHDAY_CHAT_NAME
+          value: 'Sunny'
+        # More on how the friend acts, on top of the cheerful persona:
+        # - key: BIRTHDAY_CHAT_PROMPT
+        #   value: 'Calls them "birthday star". Loves terrible cake puns.'
         - key: BIRTHDAY_PORT
           value: '8080'
 ---
@@ -128,15 +139,16 @@ spec:
     componentName: birthday
   environment: staging
   componentTypeEnvironmentConfigs:
-    # Stdlib Go page using ~10-20Mi: the web-application defaults (100m/256Mi)
-    # left no room on the single-node test cluster for the rollout's surge pod.
+    # Stdlib Go page using ~10-20Mi, plus the chat friend: each reply runs a
+    # ~250Mi Claude Code, two at most at once. Requests stay small so the
+    # single-node test cluster keeps room for the rollout's surge pod.
     resources:
       requests:
         cpu: 5m
         memory: 32Mi
       limits:
-        cpu: 100m
-        memory: 64Mi
+        cpu: '1'
+        memory: 640Mi
   traitEnvironmentConfigs:
     hostname:
       enabled: true
@@ -173,6 +185,16 @@ spec:
           value: '15'
         - key: BIRTHDAY_HALLOWEEN
           value: 'true'
+        # The chat friend on the opened card, locked by the PIN above. Sign
+        # Claude Code in once per pod: kubectl exec -it <pod> -- claude auth login
+        # (lost when the pod restarts).
+        - key: BIRTHDAY_CHAT
+          value: 'true'
+        - key: BIRTHDAY_CHAT_NAME
+          value: 'Sunny'
+        # More on how the friend acts, on top of the cheerful persona:
+        # - key: BIRTHDAY_CHAT_PROMPT
+        #   value: 'Calls them "birthday star". Loves terrible cake puns.'
         - key: BIRTHDAY_PORT
           value: '8080'
 ---
@@ -244,6 +266,11 @@ spec:
           value: '15'
         - key: BIRTHDAY_HALLOWEEN
           value: 'true'
+        # The chat friend (off by default): BIRTHDAY_CHAT 'true', with
+        # BIRTHDAY_CHAT_NAME / BIRTHDAY_CHAT_PROMPT, CLAUDE_CODE_OAUTH_TOKEN
+        # (claude setup-token) from this environment's portal secret so every
+        # replica is signed in across restarts, and limits raised to
+        # cpu 1 / memory 640Mi (see staging).
         - key: BIRTHDAY_PORT
           value: '8080'
 ---
@@ -318,5 +345,10 @@ spec:
           value: '15'
         - key: BIRTHDAY_HALLOWEEN
           value: 'true'
+        # The chat friend (off by default): BIRTHDAY_CHAT 'true', with
+        # BIRTHDAY_CHAT_NAME / BIRTHDAY_CHAT_PROMPT, CLAUDE_CODE_OAUTH_TOKEN
+        # (claude setup-token) from this environment's portal secret so every
+        # replica is signed in across restarts, and limits raised to
+        # cpu 1 / memory 640Mi (see staging).
         - key: BIRTHDAY_PORT
           value: '8080'
