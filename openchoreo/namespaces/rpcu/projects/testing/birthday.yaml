@@ -250,9 +250,12 @@ spec:
       hostnames: ['victor.mgmt.rpcu.lan'] # <name>.mgmt.rpcu.lan
       gatewayName: https
       sectionName: https
+    # Shared CephFS volume like public's, to try it before promoting there.
     # Portal-owned binding: set this in the portal too (git doesn't reach it).
     claude:
       enabled: true
+      accessMode: ReadWriteMany
+      storageClassName: ceph-cephfs
   workloadOverrides:
     container:
       env:
