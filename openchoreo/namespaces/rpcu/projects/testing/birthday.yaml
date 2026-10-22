@@ -235,6 +235,8 @@ spec:
     componentName: birthday
   environment: production
   componentTypeEnvironmentConfigs:
+    # Two replicas like public, to test them sharing the Claude login.
+    replicas: 2
     # Stdlib Go page using ~10-20Mi: the web-application defaults (100m/256Mi)
     # left no room on the single-node test cluster for the rollout's surge pod.
     resources:
