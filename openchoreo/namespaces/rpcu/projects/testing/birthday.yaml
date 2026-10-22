@@ -40,9 +40,10 @@ spec:
     - kind: Trait
       name: http-route
       instanceName: hostname
-    # Keeps the chat friend's Claude Code login (`claude auth login`) across
-    # restarts and redeploys. Per environment (traitEnvironmentConfigs.claude):
-    # ReadWriteOnce, so only where replicas is 1 (not public).
+    # Keeps the chat friend's Claude Code login (`claude auth login`) and
+    # today's conversation across restarts and redeploys. Per environment
+    # (traitEnvironmentConfigs.claude): ReadWriteOnce with one replica,
+    # ReadWriteMany (CephFS) for public's two.
     - kind: Trait
       name: persistent-volume
       instanceName: claude
@@ -332,6 +333,12 @@ spec:
       hostnames: ['victor.rpcu.io'] # <name>.rpcu.io
       gatewayName: https-external
       sectionName: https
+    # Two replicas share the login (and the chat) on CephFS. Portal-owned
+    # binding: set this in the portal too (git doesn't reach it).
+    claude:
+      enabled: true
+      accessMode: ReadWriteMany
+      storageClassName: ceph-cephfs
   workloadOverrides:
     container:
       env:
