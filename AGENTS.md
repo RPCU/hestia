@@ -308,6 +308,9 @@ standard`: development → staging → {production, public}.
     names the web-application generated hostnames can't give. Labelled as the
     `endpoint` (default `endpoint-1`, external) so the binding's
     `status.endpoints` / portal link shows these hostnames, not the generated one.
+    `requestTimeout` (default `15s`, kgateway's own default) sets the route's
+    `timeouts.request`, which covers streamed bodies too; birthday uses `180s`
+    so its 2-minute streamed chat replies aren't cut off with a 504.
   - **platform/traits/load-balancer.yaml** — namespaced `Trait/load-balancer`:
     Service type LoadBalancer (`loadBalancerIP`, `annotations`) + a
     NetworkPolicy admitting its `targetPort` from anywhere (OpenChoreo's
@@ -911,7 +914,7 @@ onto a cluster whose infrastructure is owned by argus.
 
 ---
 
-**Last Updated**: 2026-10-21 — birthday production/public bindings are UI-owned (`ssa: IfNotPresent`); birthday production/public also leave name/date/teaser unset; birthday production/public no longer set `BIRTHDAY_MESSAGE`/`BIRTHDAY_SECRET_INTRO` (app defaults); birthday's gift-card secret is PIN-guarded (`BIRTHDAY_SECRET_PIN`, portal key `pin` in production/public); mgmt DataPlane uses the dedicated `openchoreo-vault` secret store (portal secrets to mgmt got 403); birthday bindings right-sized (5m/32Mi → 100m/64Mi); birthday's hidden extra `BIRTHDAY_SECRET` comes from portal-managed OpenChoreo secrets in production/public (message back in git, production dated today); birthday bindings set `BIRTHDAY_TEASER` and `BIRTHDAY_OPEN_DAYS`; added the `birthday` component (projects/testing/birthday.yaml; countdown page, prebuilt-image pipeline like chihiro, `<name>.<domain>` hostnames). Earlier (2026-10-04): chihiro offers Kubernetes `v1.37.1` and `v1.36.3` (images `hephaestus-kaas-26.05-v<k8s>`; `v1.36.1` stays the default). Earlier: chihiro autobuild: `autoBuild: true`,
+**Last Updated**: 2026-11-07 — `http-route` trait gains `requestTimeout` (default 15s); birthday's hostname routes use 180s for the streamed chat (public 504s). Earlier (2026-10-21): birthday production/public bindings are UI-owned (`ssa: IfNotPresent`); birthday production/public also leave name/date/teaser unset; birthday production/public no longer set `BIRTHDAY_MESSAGE`/`BIRTHDAY_SECRET_INTRO` (app defaults); birthday's gift-card secret is PIN-guarded (`BIRTHDAY_SECRET_PIN`, portal key `pin` in production/public); mgmt DataPlane uses the dedicated `openchoreo-vault` secret store (portal secrets to mgmt got 403); birthday bindings right-sized (5m/32Mi → 100m/64Mi); birthday's hidden extra `BIRTHDAY_SECRET` comes from portal-managed OpenChoreo secrets in production/public (message back in git, production dated today); birthday bindings set `BIRTHDAY_TEASER` and `BIRTHDAY_OPEN_DAYS`; added the `birthday` component (projects/testing/birthday.yaml; countdown page, prebuilt-image pipeline like chihiro, `<name>.<domain>` hostnames). Earlier (2026-10-04): chihiro offers Kubernetes `v1.37.1` and `v1.36.3` (images `hephaestus-kaas-26.05-v<k8s>`; `v1.36.1` stays the default). Earlier: chihiro autobuild: `autoBuild: true`,
 `appPath` unset, `git-webhook-secrets` ExternalSecret; GitHub webhook reaches
 openchoreo-api through atlas's `openchoreo.rpcu.io` route. Earlier: DataPlanes as code (mgmt, production, test;
 clientCA from argus's shared agent CA), `public` environment (production
