@@ -168,6 +168,9 @@ spec:
       hostnames: ['victor.test.rpcu.lan'] # <name>.test.rpcu.lan
       gatewayName: https
       sectionName: https
+      # Chat replies stream for up to 2 minutes; kgateway's default 15s cut them
+      # off (a 504 before the first word).
+      requestTimeout: '180s'
     claude:
       enabled: true
   workloadOverrides:
@@ -252,6 +255,9 @@ spec:
       hostnames: ['victor.mgmt.rpcu.lan'] # <name>.mgmt.rpcu.lan
       gatewayName: https
       sectionName: https
+      # Chat replies stream for up to 2 minutes; kgateway's default 15s cut them
+      # off (a 504 before the first word). Portal-owned binding: set it there too.
+      requestTimeout: '180s'
     # Shared CephFS volume like public's, to try it before promoting there.
     # Portal-owned binding: set this in the portal too (git doesn't reach it).
     claude:
@@ -338,6 +344,9 @@ spec:
       hostnames: ['victor.rpcu.io'] # <name>.rpcu.io
       gatewayName: https-external
       sectionName: https
+      # Chat replies stream for up to 2 minutes; kgateway's default 15s cut them
+      # off (a 504 before the first word). Portal-owned binding: set it there too.
+      requestTimeout: '180s'
     # Two replicas share the login (and the chat) on CephFS. Portal-owned
     # binding: set this in the portal too (git doesn't reach it).
     claude:

@@ -26,6 +26,7 @@
 #     hostname:
 #       enabled: true
 #       hostnames: ['chihiro.mgmt.rpcu.lan']
+#       requestTimeout: '180s'   # optional, for slow or streamed responses
 apiVersion: openchoreo.dev/v1alpha1
 kind: Trait
 metadata:
@@ -66,6 +67,13 @@ spec:
           type: string
           default: 'endpoint-1'
           description: 'Workload endpoint this route serves; its URL in the binding status (and the portal) becomes these hostnames.'
+        requestTimeout:
+          type: string
+          default: '15s'
+          description: >-
+            Gateway timeout for the whole response, streamed bodies included
+            (HTTPRoute rules[].timeouts.request). 15s is kgateway's own default;
+            raise it for responses that stream longer (e.g. birthday's chat).
 
   creates:
     - targetPlane: dataplane
@@ -84,6 +92,8 @@ spec:
               sectionName: ${environmentConfigs.sectionName}
           hostnames: ${environmentConfigs.hostnames}
           rules:
-            - backendRefs:
+            - timeouts:
+                request: ${environmentConfigs.requestTimeout}
+              backendRefs:
                 - name: ${metadata.componentName}
                   port: ${environmentConfigs.port}
