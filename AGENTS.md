@@ -394,6 +394,28 @@ standard`: development → staging → {production, public}.
     promoting: env refs have no `optional`, so a missing secret blocks that
     environment's deployment. production's `BIRTHDAY_DATE` is today
     (2026-10-21) to preview the opened card.
+  - **projects/testing/letter.yaml** — the `letter` Component
+    (`deployment/web-application`): a sealed letter with one question (an
+    apology, "Do you forgive me?", by default; every word is a `LETTER_*` env
+    var, so it also does "bon voyage" pages) where Claude, through Claude Code,
+    writes a short note after each yes/no, from `github.com/RPCU/letter`. Same
+    pipeline as birthday (`autoBuild: true` + `prebuilt-image`, image
+    `zot.rpcu.io/public/letter:<tag or short SHA>`, `workload.yaml` endpoint-1
+    HTTP 8080, GitHub webhook to the autobuild endpoint). Traits:
+    `http-route/hostname` (`letter.test.rpcu.lan` staging,
+    `letter.mgmt.rpcu.lan` production, `letter.rpcu.io` public on
+    https-external, all `requestTimeout: 180s` for the streamed notes;
+    development keeps the generated hostname) and `persistent-volume/claude`
+    on `/home/letter/.claude` (the Claude login, sign in once per volume with
+    `kubectl exec -it <pod> -- claude auth login`, plus the owner's
+    `letter-answers.md` log): RWO in development/staging, CephFS RWX for
+    production/public's 2 replicas. Every binding: 5m/32Mi requests, 2 CPU /
+    640Mi limits (each note runs a ~250Mi Claude Code). No secrets: the gift
+    (`LETTER_GIFT`) is a plain env var, sent only with the yes. production and
+    public carry `kustomize.toolkit.fluxcd.io/ssa: IfNotPresent` (**web UI
+    owns them**, like birthday's): git only sets the timezone/AI/port, the
+    words are set in the portal. Without a login the page answers with
+    canned notes, and logs at Warn.
 - **platform-shared/** — cluster-scoped OpenChoreo + Argo CRs.
   - `cluster-project-types/default.yaml` — `ClusterProjectType/standard`:
     the per-environment cell Namespace (labels/annotations from
@@ -914,7 +936,7 @@ onto a cluster whose infrastructure is owned by argus.
 
 ---
 
-**Last Updated**: 2026-11-07 — `http-route` trait gains `requestTimeout` (default 15s); birthday's hostname routes use 180s for the streamed chat (public 504s). Earlier (2026-10-21): birthday production/public bindings are UI-owned (`ssa: IfNotPresent`); birthday production/public also leave name/date/teaser unset; birthday production/public no longer set `BIRTHDAY_MESSAGE`/`BIRTHDAY_SECRET_INTRO` (app defaults); birthday's gift-card secret is PIN-guarded (`BIRTHDAY_SECRET_PIN`, portal key `pin` in production/public); mgmt DataPlane uses the dedicated `openchoreo-vault` secret store (portal secrets to mgmt got 403); birthday bindings right-sized (5m/32Mi → 100m/64Mi); birthday's hidden extra `BIRTHDAY_SECRET` comes from portal-managed OpenChoreo secrets in production/public (message back in git, production dated today); birthday bindings set `BIRTHDAY_TEASER` and `BIRTHDAY_OPEN_DAYS`; added the `birthday` component (projects/testing/birthday.yaml; countdown page, prebuilt-image pipeline like chihiro, `<name>.<domain>` hostnames). Earlier (2026-10-04): chihiro offers Kubernetes `v1.37.1` and `v1.36.3` (images `hephaestus-kaas-26.05-v<k8s>`; `v1.36.1` stays the default). Earlier: chihiro autobuild: `autoBuild: true`,
+**Last Updated**: 2026-11-14 — added the `letter` component (projects/testing/letter.yaml; apology letter with Claude-written notes, prebuilt-image pipeline like birthday, `letter.<domain>` hostnames, CephFS Claude login volume in production/public). Earlier (2026-11-07): `http-route` trait gains `requestTimeout` (default 15s); birthday's hostname routes use 180s for the streamed chat (public 504s). Earlier (2026-10-21): birthday production/public bindings are UI-owned (`ssa: IfNotPresent`); birthday production/public also leave name/date/teaser unset; birthday production/public no longer set `BIRTHDAY_MESSAGE`/`BIRTHDAY_SECRET_INTRO` (app defaults); birthday's gift-card secret is PIN-guarded (`BIRTHDAY_SECRET_PIN`, portal key `pin` in production/public); mgmt DataPlane uses the dedicated `openchoreo-vault` secret store (portal secrets to mgmt got 403); birthday bindings right-sized (5m/32Mi → 100m/64Mi); birthday's hidden extra `BIRTHDAY_SECRET` comes from portal-managed OpenChoreo secrets in production/public (message back in git, production dated today); birthday bindings set `BIRTHDAY_TEASER` and `BIRTHDAY_OPEN_DAYS`; added the `birthday` component (projects/testing/birthday.yaml; countdown page, prebuilt-image pipeline like chihiro, `<name>.<domain>` hostnames). Earlier (2026-10-04): chihiro offers Kubernetes `v1.37.1` and `v1.36.3` (images `hephaestus-kaas-26.05-v<k8s>`; `v1.36.1` stays the default). Earlier: chihiro autobuild: `autoBuild: true`,
 `appPath` unset, `git-webhook-secrets` ExternalSecret; GitHub webhook reaches
 openchoreo-api through atlas's `openchoreo.rpcu.io` route. Earlier: DataPlanes as code (mgmt, production, test;
 clientCA from argus's shared agent CA), `public` environment (production

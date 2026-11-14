@@ -1,0 +1,252 @@
+apiVersion: openchoreo.dev/v1alpha1
+kind: Component
+metadata:
+  name: letter
+  namespace: rpcu
+  annotations:
+    openchoreo.dev/display-name: 'Letter'
+  labels:
+    openchoreo.dev/project: testing
+spec:
+  owner:
+    projectName: testing
+  componentType:
+    kind: ComponentType
+    name: deployment/web-application
+  # Same pipeline as birthday: push to main -> GitHub webhook ->
+  # https://openchoreo.rpcu.io/api/v1alpha1/autobuild -> WorkflowRun. The image
+  # is built by GitHub Actions (letter's image.yaml, pushed to
+  # zot.rpcu.io/public/letter:<git tag or short SHA>); the run waits for it
+  # and publishes the workload from the repo's workload.yaml descriptor
+  # (endpoint-1, HTTP 8080).
+  autoBuild: true
+  workflow:
+    kind: ClusterWorkflow
+    name: prebuilt-image
+    parameters:
+      repository:
+        url: https://github.com/RPCU/letter
+        # appPath left unset on purpose, see chihiro.yaml.
+        revision:
+          branch: main
+  traits:
+    # letter.<domain>: test.rpcu.lan (staging), mgmt.rpcu.lan (production),
+    # rpcu.io (public). development keeps OpenChoreo's generated hostname (it
+    # shares the test.rpcu.lan gateway with staging).
+    - kind: Trait
+      name: http-route
+      instanceName: hostname
+    # Keeps the Claude Code login (`claude auth login`) and the answers log
+    # (letter-answers.md) across restarts and redeploys. ReadWriteOnce with
+    # one replica, ReadWriteMany (CephFS) for production's and public's two.
+    - kind: Trait
+      name: persistent-volume
+      instanceName: claude
+      parameters:
+        mountPath: /home/letter/.claude
+---
+# Everything the page says comes from the LETTER_* env vars below (see the
+# letter README), repeated per binding so each environment can differ. Unset
+# ones fall back to the app's apology defaults.
+apiVersion: openchoreo.dev/v1alpha1
+kind: ReleaseBinding
+metadata:
+  labels:
+    openchoreo.dev/name: letter-development
+  name: letter-development
+  namespace: rpcu
+spec:
+  owner:
+    projectName: testing
+    componentName: letter
+  environment: development
+  componentTypeEnvironmentConfigs:
+    # Stdlib Go page using ~10-20Mi, plus Claude Code: each note runs a ~250Mi
+    # process, two at most at once, too slow to start on 1 CPU. Requests stay
+    # small so the single-node test cluster keeps room for a surge pod.
+    resources:
+      requests:
+        cpu: 5m
+        memory: 32Mi
+      limits:
+        cpu: '2'
+        memory: 640Mi
+  traitEnvironmentConfigs:
+    hostname:
+      enabled: false
+      gatewayName: https
+      sectionName: https
+    claude:
+      enabled: true
+  workloadOverrides:
+    container:
+      env:
+        - key: LETTER_NAME
+          value: 'Victor'
+        - key: LETTER_FROM
+          value: 'A friend'
+        # For Claude only, never shown on the page.
+        - key: LETTER_CONTEXT
+          value: 'I was late to our call and then forgot to call back.'
+        - key: LETTER_GIFT
+          value: 'DEMO-DINNER-ON-ME'
+        - key: LETTER_TIMEZONE
+          value: 'Europe/Paris'
+        # Claude writes the notes once signed in, once per volume:
+        # kubectl exec -it <pod> -- claude auth login
+        - key: LETTER_AI
+          value: 'true'
+        - key: LETTER_PORT
+          value: '8080'
+---
+# releaseName is set by promotion (development -> staging), not in git.
+apiVersion: openchoreo.dev/v1alpha1
+kind: ReleaseBinding
+metadata:
+  labels:
+    openchoreo.dev/name: letter-staging
+  name: letter-staging
+  namespace: rpcu
+spec:
+  owner:
+    projectName: testing
+    componentName: letter
+  environment: staging
+  componentTypeEnvironmentConfigs:
+    resources:
+      requests:
+        cpu: 5m
+        memory: 32Mi
+      limits:
+        cpu: '2'
+        memory: 640Mi
+  traitEnvironmentConfigs:
+    hostname:
+      enabled: true
+      hostnames: ['letter.test.rpcu.lan']
+      gatewayName: https
+      sectionName: https
+      # Notes stream for up to 2 minutes; kgateway's default 15s cuts them.
+      requestTimeout: '180s'
+    claude:
+      enabled: true
+  workloadOverrides:
+    container:
+      env:
+        - key: LETTER_NAME
+          value: 'Victor'
+        - key: LETTER_FROM
+          value: 'A friend'
+        - key: LETTER_CONTEXT
+          value: 'I was late to our call and then forgot to call back.'
+        - key: LETTER_GIFT
+          value: 'DEMO-DINNER-ON-ME'
+        - key: LETTER_TIMEZONE
+          value: 'Europe/Paris'
+        - key: LETTER_AI
+          value: 'true'
+        - key: LETTER_PORT
+          value: '8080'
+---
+# Production: internal, on mgmt at letter.mgmt.rpcu.lan.
+# releaseName is set by promotion (staging -> production), not in git.
+apiVersion: openchoreo.dev/v1alpha1
+kind: ReleaseBinding
+metadata:
+  annotations:
+    # The web UI owns this binding: Flux creates it if missing but never
+    # updates it, so the words set in the portal stick (the env list is
+    # atomic, so Flux would otherwise replace it every sync). Git edits below
+    # no longer reach the live object; apply them by hand or in the portal.
+    kustomize.toolkit.fluxcd.io/ssa: IfNotPresent
+  labels:
+    openchoreo.dev/name: letter-production
+  name: letter-production
+  namespace: rpcu
+spec:
+  owner:
+    projectName: testing
+    componentName: letter
+  environment: production
+  componentTypeEnvironmentConfigs:
+    replicas: 2
+    resources:
+      requests:
+        cpu: 5m
+        memory: 32Mi
+      limits:
+        cpu: '2'
+        memory: 640Mi
+  traitEnvironmentConfigs:
+    hostname:
+      enabled: true
+      hostnames: ['letter.mgmt.rpcu.lan']
+      gatewayName: https
+      sectionName: https
+      requestTimeout: '180s'
+    # Two replicas share the login and the answers log on CephFS.
+    claude:
+      enabled: true
+      accessMode: ReadWriteMany
+      storageClassName: ceph-cephfs
+  workloadOverrides:
+    container:
+      env:
+        # LETTER_NAME, LETTER_FROM, LETTER_TITLE, LETTER_MESSAGE,
+        # LETTER_QUESTION, LETTER_CONTEXT, LETTER_GIFT… are set in the portal
+        # (unset: the app's apology defaults, "Dear you,").
+        - key: LETTER_TIMEZONE
+          value: 'Europe/Paris'
+        - key: LETTER_AI
+          value: 'true'
+        - key: LETTER_PORT
+          value: '8080'
+---
+# Public: on the production cluster, exposed on the internet at
+# letter.rpcu.io (https-external gateway).
+# releaseName is set by promotion (staging -> public), not in git.
+apiVersion: openchoreo.dev/v1alpha1
+kind: ReleaseBinding
+metadata:
+  annotations:
+    # Web UI owned, like production (see above).
+    kustomize.toolkit.fluxcd.io/ssa: IfNotPresent
+  labels:
+    openchoreo.dev/name: letter-public
+  name: letter-public
+  namespace: rpcu
+spec:
+  owner:
+    projectName: testing
+    componentName: letter
+  environment: public
+  componentTypeEnvironmentConfigs:
+    replicas: 2
+    resources:
+      requests:
+        cpu: 5m
+        memory: 32Mi
+      limits:
+        cpu: '2'
+        memory: 640Mi
+  traitEnvironmentConfigs:
+    hostname:
+      enabled: true
+      hostnames: ['letter.rpcu.io']
+      gatewayName: https-external
+      sectionName: https
+      requestTimeout: '180s'
+    claude:
+      enabled: true
+      accessMode: ReadWriteMany
+      storageClassName: ceph-cephfs
+  workloadOverrides:
+    container:
+      env:
+        # The words are set in the portal (see production).
+        - key: LETTER_TIMEZONE
+          value: 'Europe/Paris'
+        - key: LETTER_AI
+          value: 'true'
+        - key: LETTER_PORT
+          value: '8080'
