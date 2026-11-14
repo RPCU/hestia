@@ -20,6 +20,8 @@ spec:
   # and publishes the workload from the repo's workload.yaml descriptor
   # (endpoint-1, HTTP 8080).
   autoBuild: true
+  # Each new release deploys to development by itself; promote from there.
+  autoDeploy: true
   workflow:
     kind: ClusterWorkflow
     name: prebuilt-image

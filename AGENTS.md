@@ -399,7 +399,8 @@ standard`: development → staging → {production, public}.
     apology, "Do you forgive me?", by default; every word is a `LETTER_*` env
     var, so it also does "bon voyage" pages) where Claude, through Claude Code,
     writes a short note after each yes/no, from `github.com/RPCU/letter`. Same
-    pipeline as birthday (`autoBuild: true` + `prebuilt-image`, image
+    pipeline as birthday (`autoBuild: true`, `autoDeploy: true` (each release
+    lands in development by itself) + `prebuilt-image`, image
     `zot.rpcu.io/public/letter:<tag or short SHA>`, `workload.yaml` endpoint-1
     HTTP 8080, GitHub webhook to the autobuild endpoint). Traits:
     `http-route/hostname` (`letter.test.rpcu.lan` staging,
