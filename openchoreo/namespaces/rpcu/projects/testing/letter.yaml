@@ -50,6 +50,16 @@ spec:
 # Everything the page says comes from the LETTER_* env vars below (see the
 # letter README), repeated per binding so each environment can differ. Unset
 # ones fall back to the app's apology defaults.
+# LETTER_PIN (the code that locks the page) is the exception in production
+# and public: it is birthday's PIN, read from birthday's portal-managed
+# OpenChoreo secrets (Secrets > generic, in Vault, never in git), key "pin":
+#   birthday-production -> DataPlane mgmt
+#   birthday-public     -> DataPlane production
+# Changing the PIN there changes both apps' (birthday allows 4 to 12
+# characters, letter 4 to 64). Those SecretReferences are API-managed
+# (openchoreo.dev/managed-by: openchoreo-api), so they must not be added here,
+# and a binding whose secret doesn't exist cannot deploy (OpenChoreo env refs
+# have no "optional"). development and staging stay unlocked.
 apiVersion: openchoreo.dev/v1alpha1
 kind: ReleaseBinding
 metadata:
@@ -197,6 +207,13 @@ spec:
         # LETTER_NAME, LETTER_FROM, LETTER_TITLE, LETTER_MESSAGE,
         # LETTER_QUESTION, LETTER_CONTEXT, LETTER_GIFT… are set in the portal
         # (unset: the app's apology defaults, "Dear you,").
+        # The code that locks the page, never in git: birthday's PIN, from
+        # OpenChoreo secret birthday-production (portal > Secrets), key "pin".
+        - key: LETTER_PIN
+          valueFrom:
+            secretKeyRef:
+              name: birthday-production
+              key: pin
         - key: LETTER_TIMEZONE
           value: 'Europe/Paris'
         - key: LETTER_AI
@@ -246,6 +263,13 @@ spec:
     container:
       env:
         # The words are set in the portal (see production).
+        # The code that locks the page: birthday's PIN, from OpenChoreo secret
+        # birthday-public (portal > Secrets), key "pin".
+        - key: LETTER_PIN
+          valueFrom:
+            secretKeyRef:
+              name: birthday-public
+              key: pin
         - key: LETTER_TIMEZONE
           value: 'Europe/Paris'
         - key: LETTER_AI
